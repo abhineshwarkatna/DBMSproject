@@ -365,6 +365,53 @@ body.sidebar-collapsed .sidebar-toggle-btn svg {
     transform: scaleX(-1);
 }
 
+/* Supabase Cloud Connection Status Pill */
+.supabase-status-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 14px;
+    border-radius: var(--radius-full);
+    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid var(--border-hairline);
+    color: var(--text-high);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.supabase-status-btn:hover {
+    background: #ffffff;
+    border-color: rgba(16, 185, 129, 0.4);
+    box-shadow: 0 3px 10px rgba(16, 185, 129, 0.15);
+    transform: translateY(-1px);
+}
+
+.supabase-status-btn .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #f59e0b;
+    transition: background 0.3s ease, box-shadow 0.3s ease;
+}
+
+.supabase-status-btn.connected {
+    border-color: rgba(16, 185, 129, 0.35);
+    background: rgba(16, 185, 129, 0.07);
+    color: #065f46;
+}
+
+.supabase-status-btn.connected .status-dot {
+    background: #10b981;
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+}
+
+.supabase-badge-icon {
+    font-size: 14px;
+}
+
 .header-title-container h2 {
     font-family: var(--font-heading);
     font-size: 19px;

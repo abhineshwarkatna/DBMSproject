@@ -242,6 +242,13 @@ class EventoraDB {
         };
         this.data.events.push(newEvent);
         this.save();
+
+        // Sync to Supabase PostgreSQL Cloud if connected
+        if (window.EventoraSupabase && window.EventoraSupabase.isConnected) {
+            const { description, ...cloudData } = newEvent;
+            window.EventoraSupabase.insertEvent(cloudData).catch(err => console.warn('Supabase sync notice:', err.message));
+        }
+
         return newEvent;
     }
 
@@ -254,6 +261,11 @@ class EventoraDB {
         this.data.expenses = this.data.expenses.filter(x => x.event_id !== id);
         this.data.payments = this.data.payments.filter(p => p.event_id !== id);
         this.save();
+
+        // Sync to Supabase PostgreSQL Cloud if connected
+        if (window.EventoraSupabase && window.EventoraSupabase.isConnected) {
+            window.EventoraSupabase.deleteEvent(id).catch(err => console.warn('Supabase sync notice:', err.message));
+        }
     }
 
     // --- VENDORS & BOOKINGS ---
@@ -328,6 +340,12 @@ class EventoraDB {
         });
 
         this.save();
+
+        // Sync to Supabase PostgreSQL Cloud if connected
+        if (window.EventoraSupabase && window.EventoraSupabase.isConnected) {
+            window.EventoraSupabase.insertBooking(newBooking).catch(err => console.warn('Supabase sync notice:', err.message));
+        }
+
         return newBooking;
     }
 
@@ -368,6 +386,12 @@ class EventoraDB {
         };
         this.data.guests.push(newGuest);
         this.save();
+
+        // Sync to Supabase PostgreSQL Cloud if connected
+        if (window.EventoraSupabase && window.EventoraSupabase.isConnected) {
+            window.EventoraSupabase.insertGuest(newGuest).catch(err => console.warn('Supabase sync notice:', err.message));
+        }
+
         return newGuest;
     }
 
@@ -412,6 +436,12 @@ class EventoraDB {
         };
         this.data.expenses.push(newExpense);
         this.save();
+
+        // Sync to Supabase PostgreSQL Cloud if connected
+        if (window.EventoraSupabase && window.EventoraSupabase.isConnected) {
+            window.EventoraSupabase.insertExpense(newExpense).catch(err => console.warn('Supabase sync notice:', err.message));
+        }
+
         return newExpense;
     }
 
@@ -453,6 +483,12 @@ class EventoraDB {
         };
         this.data.payments.push(newPayment);
         this.save();
+
+        // Sync to Supabase PostgreSQL Cloud if connected
+        if (window.EventoraSupabase && window.EventoraSupabase.isConnected) {
+            window.EventoraSupabase.insertPayment(newPayment).catch(err => console.warn('Supabase sync notice:', err.message));
+        }
+
         return newPayment;
     }
 

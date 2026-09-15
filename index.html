@@ -121,6 +121,13 @@
                     🔊
                 </button>
 
+                <!-- Supabase Cloud Connection Status Pill -->
+                <button class="supabase-status-btn" id="supabaseStatusPill" onclick="App.openModal('modalSupabaseConfig')" title="Supabase Cloud Database Settings">
+                    <span class="status-dot" id="supabaseStatusDot"></span>
+                    <span class="supabase-badge-icon">⚡</span>
+                    <span id="supabaseStatusText">Connect Supabase</span>
+                </button>
+
                 <button class="btn btn-secondary btn-sm" onclick="DbmsStudioModule.exportSQLFile()">
                     📥 MySQL .sql
                 </button>
@@ -1067,8 +1074,63 @@
     </div>
 </div>
 
+<!-- Modal: Supabase Cloud PostgreSQL Configuration -->
+<div class="modal-overlay" id="modalSupabaseConfig">
+    <div class="modal-card" style="max-width: 620px;">
+        <div class="modal-header">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="width: 38px; height: 38px; border-radius: var(--radius-md); background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 19px; font-weight: 800; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);">⚡</div>
+                <div>
+                    <h3>Supabase Cloud PostgreSQL Backend</h3>
+                    <p style="font-size: 12px; color: var(--text-muted);">Connect your live PostgreSQL cloud database instance</p>
+                </div>
+            </div>
+            <button class="modal-close" onclick="App.closeModal('modalSupabaseConfig')">&times;</button>
+        </div>
+        <div class="modal-body" style="display: flex; flex-direction: column; gap: 16px;">
+            <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.22); border-radius: var(--radius-md); padding: 14px 16px; font-size: 12.5px; line-height: 1.5; color: var(--text-high);">
+                <strong>🎓 Live DBMS Cloud Architecture:</strong> Connect your free Supabase project to enforce real PostgreSQL foreign keys, relational constraints, and real-time cloud data synchronization.
+            </div>
+
+            <div class="form-group">
+                <label>Supabase Project URL</label>
+                <input type="url" id="inputSupabaseUrl" class="form-control" placeholder="https://xyzcompany.supabase.co" />
+                <span style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;">Found in Supabase Dashboard -> Project Settings -> API</span>
+            </div>
+
+            <div class="form-group">
+                <label>Supabase Anon / Public API Key</label>
+                <input type="password" id="inputSupabaseKey" class="form-control" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." />
+                <span style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;">Public anonymous key (safe for browser client requests)</span>
+            </div>
+
+            <div id="supabaseConnectionDetails" style="display: none; padding: 12px 14px; border-radius: var(--radius-md); font-size: 12px; transition: all 0.2s ease;"></div>
+
+            <div style="display: flex; gap: 10px; flex-wrap: wrap; padding-top: 4px;">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="App.copySupabaseSchema()" style="flex: 1;">
+                    📋 Copy PostgreSQL Schema (SQL)
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="App.seedSupabaseCloud()" style="flex: 1;">
+                    ☁️ Sync Local Data to Supabase
+                </button>
+            </div>
+        </div>
+        <div class="modal-footer" style="justify-content: space-between;">
+            <button type="button" class="btn btn-secondary" onclick="App.clearSupabaseConfig()">Disconnect</button>
+            <div style="display: flex; gap: 10px;">
+                <button type="button" class="btn btn-secondary" onclick="App.closeModal('modalSupabaseConfig')">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="App.saveSupabaseConfig()">Save & Test Connection</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Toast Container -->
 <div class="toast-container" id="toastContainer"></div>
+
+<!-- Supabase Client SDK -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/supabaseClient.js"></script>
 
 <!-- Application JavaScript Bundles -->
 <script src="js/db.js"></script>

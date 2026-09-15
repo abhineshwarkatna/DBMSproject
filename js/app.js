@@ -111,6 +111,15 @@ window.App = {
         if (modal) {
             modal.classList.add('active');
             document.body.style.overflow = 'hidden';
+
+            // Populate Supabase credentials if opening config
+            if (modalId === 'modalSupabaseConfig' && window.EventoraSupabase) {
+                const urlInput = document.getElementById('inputSupabaseUrl');
+                const keyInput = document.getElementById('inputSupabaseKey');
+                if (urlInput) urlInput.value = window.EventoraSupabase.getUrl();
+                if (keyInput) keyInput.value = window.EventoraSupabase.getKey();
+            }
+
             if (window.InteractiveFx) window.InteractiveFx.playSynth('mode');
         }
     },
@@ -204,6 +213,85 @@ window.App = {
                 }
             }
         });
+    },
+
+    // Supabase Cloud Backend Controls
+    async saveSupabaseConfig() {
+        const urlInput = document.getElementById('inputSupabaseUrl');
+        const keyInput = document.getElementById('inputSupabaseKey');
+        const details = document.getElementById('supabaseConnectionDetails');
+
+        const url = urlInput ? urlInput.value : '';
+        const key = keyInput ? keyInput.value : '';
+
+        if (!url || !key) {
+            this.showToast('Please provide both Project URL and Anon API Key.', 'error');
+            return;
+        }
+
+        if (details) {
+            details.style.display = 'block';
+            details.style.background = 'rgba(79, 70, 229, 0.08)';
+            details.style.border = '1px solid rgba(79, 70, 229, 0.2)';
+            details.style.color = 'var(--text-high)';
+            details.innerText = 'Testing connection to Supabase cloud PostgreSQL...';
+        }
+
+        const res = await window.EventoraSupabase.saveCredentials(url, key);
+
+        if (details) {
+            if (res.success) {
+                details.style.background = 'rgba(16, 185, 129, 0.12)';
+                details.style.border = '1px solid rgba(16, 185, 129, 0.3)';
+                details.style.color = '#065f46';
+                details.innerHTML = `<strong>✓ Live PostgreSQL Connected</strong> (Latency: ${res.latencyMs}ms)<br/><span style="font-size: 11.5px; opacity: 0.9;">${res.message}</span>`;
+                setTimeout(() => this.closeModal('modalSupabaseConfig'), 1800);
+            } else {
+                details.style.background = 'rgba(239, 68, 68, 0.12)';
+                details.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+                details.style.color = '#991b1b';
+                details.innerHTML = `<strong>⚠ Connection Notice</strong><br/><span style="font-size: 11.5px; opacity: 0.9;">${res.message}</span>`;
+            }
+        }
+    },
+
+    async copySupabaseSchema() {
+        try {
+            const resp = await fetch('data/supabase_schema.sql');
+            const sql = await resp.text();
+            await navigator.clipboard.writeText(sql);
+            this.showToast('PostgreSQL SQL Schema copied! Paste in Supabase SQL Editor.', 'success');
+        } catch (e) {
+            this.showToast('Schema file is saved at data/supabase_schema.sql', 'info');
+        }
+    },
+
+    async seedSupabaseCloud() {
+        if (!window.EventoraSupabase || !window.EventoraSupabase.isConnected) {
+            this.showToast('Please connect to Supabase first before uploading data.', 'error');
+            return;
+        }
+        try {
+            this.showToast('Uploading relational data to Supabase cloud...', 'info');
+            await window.EventoraSupabase.seedCloudDatabase();
+            this.showToast('✓ Local relational data synced to Supabase PostgreSQL!', 'success');
+        } catch (e) {
+            this.showToast('Sync notice: ' + e.message, 'error');
+        }
+    },
+
+    clearSupabaseConfig() {
+        if (window.EventoraSupabase) {
+            window.EventoraSupabase.saveCredentials('', '');
+        }
+        const urlInput = document.getElementById('inputSupabaseUrl');
+        const keyInput = document.getElementById('inputSupabaseKey');
+        if (urlInput) urlInput.value = '';
+        if (keyInput) keyInput.value = '';
+        const details = document.getElementById('supabaseConnectionDetails');
+        if (details) details.style.display = 'none';
+        this.showToast('Supabase disconnected. Operating in local relational mode.', 'info');
+        this.closeModal('modalSupabaseConfig');
     },
 
     // Database Reset
