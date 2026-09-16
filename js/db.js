@@ -177,17 +177,17 @@ class EventoraDB {
     }
 
     init() {
-        const stored = localStorage.getItem(DB_STORAGE_KEY);
-        if (!stored) {
-            this.resetToDefaults();
-        } else {
-            try {
-                this.data = JSON.parse(stored);
-            } catch (e) {
-                console.error('Failed to parse stored DB, resetting:', e);
-                this.resetToDefaults();
-            }
-        }
+        // Start with empty data — Supabase will populate via loadAllIntoLocalDB()
+        // INITIAL_DATA is preserved only for resetToDefaults() demo mode
+        this.data = {
+            users:    [],
+            events:   [],
+            vendors:  [],
+            bookings: [],
+            guests:   [],
+            expenses: [],
+            payments: []
+        };
     }
 
     resetToDefaults() {
@@ -243,10 +243,12 @@ class EventoraDB {
         this.data.events.push(newEvent);
         this.save();
 
-        // Sync to Supabase PostgreSQL Cloud if connected
+        // Sync to Supabase PostgreSQL Cloud if connected — then reload real data
         if (window.EventoraSupabase && window.EventoraSupabase.isConnected) {
-            const { description, ...cloudData } = newEvent;
-            window.EventoraSupabase.insertEvent(cloudData).catch(err => console.warn('Supabase sync notice:', err.message));
+            window.EventoraSupabase.insertEvent(newEvent)
+                .then(() => window.EventoraSupabase.loadAllIntoLocalDB())
+                .then(() => { if (window.App) window.App.refreshAllModules(); })
+                .catch(err => console.warn('Supabase sync notice:', err.message));
         }
 
         return newEvent;
@@ -264,7 +266,10 @@ class EventoraDB {
 
         // Sync to Supabase PostgreSQL Cloud if connected
         if (window.EventoraSupabase && window.EventoraSupabase.isConnected) {
-            window.EventoraSupabase.deleteEvent(id).catch(err => console.warn('Supabase sync notice:', err.message));
+            window.EventoraSupabase.deleteEvent(id)
+                .then(() => window.EventoraSupabase.loadAllIntoLocalDB())
+                .then(() => { if (window.App) window.App.refreshAllModules(); })
+                .catch(err => console.warn('Supabase sync notice:', err.message));
         }
     }
 
@@ -293,6 +298,15 @@ class EventoraDB {
         };
         this.data.vendors.push(newVendor);
         this.save();
+
+        // Sync to Supabase if connected
+        if (window.EventoraSupabase && window.EventoraSupabase.isConnected) {
+            window.EventoraSupabase.insertVendor(newVendor)
+                .then(() => window.EventoraSupabase.loadAllIntoLocalDB())
+                .then(() => { if (window.App) window.App.refreshAllModules(); })
+                .catch(err => console.warn('Supabase vendor sync:', err.message));
+        }
+
         return newVendor;
     }
 
@@ -341,9 +355,16 @@ class EventoraDB {
 
         this.save();
 
-        // Sync to Supabase PostgreSQL Cloud if connected
+        // Sync booking + auto-expense to Supabase, then reload
         if (window.EventoraSupabase && window.EventoraSupabase.isConnected) {
-            window.EventoraSupabase.insertBooking(newBooking).catch(err => console.warn('Supabase sync notice:', err.message));
+            const autoExpense = this.data.expenses[this.data.expenses.length - 1];
+            Promise.all([
+                window.EventoraSupabase.insertBooking(newBooking),
+                window.EventoraSupabase.insertExpense(autoExpense)
+            ])
+            .then(() => window.EventoraSupabase.loadAllIntoLocalDB())
+            .then(() => { if (window.App) window.App.refreshAllModules(); })
+            .catch(err => console.warn('Supabase sync notice:', err.message));
         }
 
         return newBooking;
@@ -389,7 +410,10 @@ class EventoraDB {
 
         // Sync to Supabase PostgreSQL Cloud if connected
         if (window.EventoraSupabase && window.EventoraSupabase.isConnected) {
-            window.EventoraSupabase.insertGuest(newGuest).catch(err => console.warn('Supabase sync notice:', err.message));
+            window.EventoraSupabase.insertGuest(newGuest)
+                .then(() => window.EventoraSupabase.loadAllIntoLocalDB())
+                .then(() => { if (window.App) window.App.refreshAllModules(); })
+                .catch(err => console.warn('Supabase sync notice:', err.message));
         }
 
         return newGuest;
@@ -400,12 +424,30 @@ class EventoraDB {
         if (guest) {
             guest.rsvp_status = status;
             this.save();
+
+            // Sync RSVP update to Supabase
+            if (window.EventoraSupabase && window.EventoraSupabase.isConnected) {
+                window.EventoraSupabase.client
+                    .from('guests')
+                    .update({ rsvp_status: status })
+                    .eq('guest_id', Number(guestId))
+                    .then(() => window.EventoraSupabase.loadAllIntoLocalDB())
+                    .catch(err => console.warn('Supabase RSVP sync:', err.message));
+            }
         }
     }
 
     deleteGuest(guestId) {
         this.data.guests = this.data.guests.filter(g => g.guest_id !== Number(guestId));
         this.save();
+
+        // Sync delete to Supabase
+        if (window.EventoraSupabase && window.EventoraSupabase.isConnected) {
+            window.EventoraSupabase.deleteGuest(Number(guestId))
+                .then(() => window.EventoraSupabase.loadAllIntoLocalDB())
+                .then(() => { if (window.App) window.App.refreshAllModules(); })
+                .catch(err => console.warn('Supabase sync notice:', err.message));
+        }
     }
 
     // --- EXPENSES ---
@@ -439,7 +481,10 @@ class EventoraDB {
 
         // Sync to Supabase PostgreSQL Cloud if connected
         if (window.EventoraSupabase && window.EventoraSupabase.isConnected) {
-            window.EventoraSupabase.insertExpense(newExpense).catch(err => console.warn('Supabase sync notice:', err.message));
+            window.EventoraSupabase.insertExpense(newExpense)
+                .then(() => window.EventoraSupabase.loadAllIntoLocalDB())
+                .then(() => { if (window.App) window.App.refreshAllModules(); })
+                .catch(err => console.warn('Supabase sync notice:', err.message));
         }
 
         return newExpense;
@@ -448,6 +493,13 @@ class EventoraDB {
     deleteExpense(expenseId) {
         this.data.expenses = this.data.expenses.filter(x => x.expense_id !== Number(expenseId));
         this.save();
+
+        // Sync delete to Supabase
+        if (window.EventoraSupabase && window.EventoraSupabase.isConnected) {
+            window.EventoraSupabase.deleteExpense(Number(expenseId))
+                .then(() => window.EventoraSupabase.loadAllIntoLocalDB())
+                .catch(err => console.warn('Supabase sync notice:', err.message));
+        }
     }
 
     // --- PAYMENTS ---
@@ -486,7 +538,10 @@ class EventoraDB {
 
         // Sync to Supabase PostgreSQL Cloud if connected
         if (window.EventoraSupabase && window.EventoraSupabase.isConnected) {
-            window.EventoraSupabase.insertPayment(newPayment).catch(err => console.warn('Supabase sync notice:', err.message));
+            window.EventoraSupabase.insertPayment(newPayment)
+                .then(() => window.EventoraSupabase.loadAllIntoLocalDB())
+                .then(() => { if (window.App) window.App.refreshAllModules(); })
+                .catch(err => console.warn('Supabase sync notice:', err.message));
         }
 
         return newPayment;

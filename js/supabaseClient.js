@@ -8,6 +8,7 @@ window.EventoraSupabase = {
     client: null,
     isConnected: false,
     latencyMs: null,
+    connectionPromise: null,
 
     // Storage Keys
     STORAGE_KEYS: {
@@ -31,13 +32,22 @@ window.EventoraSupabase = {
         if (url && key && window.supabase) {
             try {
                 this.client = window.supabase.createClient(url, key);
-                this.testConnection(false);
+                // Store connection promise so app.js can await it before first render
+                this.connectionPromise = this.testConnection(false).then(result => {
+                    if (result && result.success) {
+                        // Auto-load all real data from Supabase into local DB
+                        return this.loadAllIntoLocalDB();
+                    }
+                    return result;
+                });
             } catch (err) {
                 console.warn('Supabase initialization warning:', err.message);
                 this.updateStatusPill(false);
+                this.connectionPromise = Promise.resolve({ success: false });
             }
         } else {
             this.updateStatusPill(false);
+            this.connectionPromise = Promise.resolve({ success: false });
         }
     },
 
@@ -155,7 +165,18 @@ window.EventoraSupabase = {
 
     async insertEvent(eventData) {
         if (!this.isConnected || !this.client) return null;
-        const { data, error } = await this.client.from('events').insert([eventData]).select();
+        // Strip auto-generated ID (GENERATED ALWAYS AS IDENTITY)
+        const { event_id, description, created_at, ...cleanData } = eventData;
+        const { data, error } = await this.client.from('events').insert([cleanData]).select();
+        if (error) throw error;
+        return data ? data[0] : null;
+    },
+
+    async insertVendor(vendorData) {
+        if (!this.isConnected || !this.client) return null;
+        // Strip auto-generated ID and fields not in Supabase schema
+        const { vendor_id, badge, created_at, ...cleanData } = vendorData;
+        const { data, error } = await this.client.from('vendors').insert([cleanData]).select();
         if (error) throw error;
         return data ? data[0] : null;
     },
@@ -185,9 +206,18 @@ window.EventoraSupabase = {
 
     async insertGuest(guestData) {
         if (!this.isConnected || !this.client) return null;
-        const { data, error } = await this.client.from('guests').insert([guestData]).select();
+        // Strip auto-generated ID
+        const { guest_id, event_title, created_at, ...cleanData } = guestData;
+        const { data, error } = await this.client.from('guests').insert([cleanData]).select();
         if (error) throw error;
         return data ? data[0] : null;
+    },
+
+    async deleteGuest(guestId) {
+        if (!this.isConnected || !this.client) return null;
+        const { error } = await this.client.from('guests').delete().eq('guest_id', Number(guestId));
+        if (error) throw error;
+        return true;
     },
 
     // 4. Expenses
@@ -200,9 +230,18 @@ window.EventoraSupabase = {
 
     async insertExpense(expenseData) {
         if (!this.isConnected || !this.client) return null;
-        const { data, error } = await this.client.from('expenses').insert([expenseData]).select();
+        // Strip auto-generated ID and local-only fields
+        const { expense_id, event_title, created_at, ...cleanData } = expenseData;
+        const { data, error } = await this.client.from('expenses').insert([cleanData]).select();
         if (error) throw error;
         return data ? data[0] : null;
+    },
+
+    async deleteExpense(expenseId) {
+        if (!this.isConnected || !this.client) return null;
+        const { error } = await this.client.from('expenses').delete().eq('expense_id', Number(expenseId));
+        if (error) throw error;
+        return true;
     },
 
     // 5. Payments
@@ -215,7 +254,9 @@ window.EventoraSupabase = {
 
     async insertPayment(paymentData) {
         if (!this.isConnected || !this.client) return null;
-        const { data, error } = await this.client.from('payments').insert([paymentData]).select();
+        // Strip auto-generated ID and local-only fields
+        const { payment_id, event_title, vendor_recipient, created_at, ...cleanData } = paymentData;
+        const { data, error } = await this.client.from('payments').insert([cleanData]).select();
         if (error) throw error;
         return data ? data[0] : null;
     },
@@ -226,6 +267,54 @@ window.EventoraSupabase = {
         const { data, error } = await this.client.from('bookings').select('*').order('booking_id', { ascending: true });
         if (error) { console.error('Supabase fetchBookings error:', error); return null; }
         return data;
+    },
+
+    async insertBooking(bookingData) {
+        if (!this.isConnected || !this.client) return null;
+        // Strip auto-generated ID and local-only join fields
+        const { booking_id, event_title, vendor_name, vendor_category, vendor_phone, booking_date, ...cleanData } = bookingData;
+        const { data, error } = await this.client.from('bookings').insert([cleanData]).select();
+        if (error) throw error;
+        return data ? data[0] : null;
+    },
+
+    // 7. Users
+    async fetchUsers() {
+        if (!this.isConnected || !this.client) return null;
+        const { data, error } = await this.client.from('users').select('*').order('user_id', { ascending: true });
+        if (error) { console.error('Supabase fetchUsers error:', error); return null; }
+        return data;
+    },
+
+    // Load ALL tables from Supabase into local EventoraDB — replaces any fake/stale data
+    async loadAllIntoLocalDB() {
+        if (!this.isConnected || !this.client) return false;
+        try {
+            const [events, vendors, guests, expenses, payments, bookings, users] = await Promise.all([
+                this.fetchEvents(),
+                this.fetchVendors(),
+                this.fetchGuests(),
+                this.fetchExpenses(),
+                this.fetchPayments(),
+                this.fetchBookings(),
+                this.fetchUsers()
+            ]);
+
+            if (events !== null)   window.EventoraDB.data.events   = events;
+            if (vendors !== null)  window.EventoraDB.data.vendors  = vendors;
+            if (guests !== null)   window.EventoraDB.data.guests   = guests;
+            if (expenses !== null) window.EventoraDB.data.expenses = expenses;
+            if (payments !== null) window.EventoraDB.data.payments = payments;
+            if (bookings !== null) window.EventoraDB.data.bookings = bookings;
+            if (users !== null)    window.EventoraDB.data.users    = users;
+
+            window.EventoraDB.save();
+            console.log('✓ All data loaded from Supabase PostgreSQL into local DB');
+            return true;
+        } catch (err) {
+            console.error('Failed to load all data from Supabase:', err);
+            return false;
+        }
     },
 
     // Push local seed data to Supabase

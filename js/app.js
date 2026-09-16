@@ -5,11 +5,17 @@
 window.App = {
     activeTab: 'overview',
 
-    init() {
+    async init() {
         this.initSidebar();
         this.setupNavigation();
         this.setupModals();
         this.setupKeyboardShortcuts();
+
+        // Wait for Supabase to connect and load real data before first render
+        if (window.EventoraSupabase && window.EventoraSupabase.connectionPromise) {
+            await window.EventoraSupabase.connectionPromise;
+        }
+
         this.refreshAllModules();
 
         // Initial SQL Console Run
