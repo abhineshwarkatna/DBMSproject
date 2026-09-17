@@ -111,6 +111,8 @@ window.App = (() => {
   };
 
   const goHome = () => {
+    // If not logged in, home = login page
+    if (!AuthModule.isLoggedIn()) { goAuth('login'); return; }
     showView('home');
     setTimeout(() => LandingModule.init(), 50);
     setTimeout(() => AuthModule.updateNavActions(), 100);
@@ -340,7 +342,16 @@ window.App = (() => {
     EventoraDB.init();
     initNavScroll();
     AuthModule.init();
-    goHome();
+
+    // Restore session if user was previously logged in
+    const existingUser = AuthModule.getUser();
+    if (existingUser) {
+      EventoraDB.setUser(existingUser.id);
+      goDashboard();
+    } else {
+      goAuth('login');
+    }
+
     setTimeout(initScrollReveal, 300);
   });
 

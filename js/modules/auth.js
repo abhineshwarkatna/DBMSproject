@@ -21,9 +21,10 @@ window.AuthModule = (() => {
 
   const logout = () => {
     localStorage.removeItem(SESSION_KEY);
+    EventoraDB.setUser(null);
     updateNavActions();
     updateSidebarUser();
-    App.goHome();
+    App.goAuth('login');
     Toast.show('info', 'Signed out', 'See you next time!');
   };
 
@@ -122,7 +123,12 @@ window.AuthModule = (() => {
     // Simulate auth (localStorage-based for this offline demo)
     setTimeout(() => {
       const name = email.split('@')[0].replace(/[._]/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
-      setUser({ id: EventoraDB.uid(), name, email, loginMethod: 'email', loginAt: Date.now() });
+      const userId = btoa(email).replace(/[^a-z0-9]/gi,'').slice(0,16);
+      const userObj = { id: userId, name, email, loginMethod: 'email', loginAt: Date.now() };
+      setUser(userObj);
+      EventoraDB.setUser(userId);
+      const isNew = EventoraDB.getAllEvents().length === 0;
+      if (isNew) EventoraDB.seedDemoData();
       Toast.show('success', `Welcome back, ${name.split(' ')[0]}!`, '');
       if (btn) { btn.textContent = 'Sign In'; btn.disabled = false; }
       App.afterAuth();
@@ -141,7 +147,12 @@ window.AuthModule = (() => {
     if (password !== confirm) { Toast.show('warning', 'Passwords do not match', ''); return; }
 
     setTimeout(() => {
-      setUser({ id: EventoraDB.uid(), name, email, loginMethod: 'email', loginAt: Date.now() });
+      const userId = btoa(email).replace(/[^a-z0-9]/gi,'').slice(0,16);
+      const userObj = { id: userId, name, email, loginMethod: 'email', loginAt: Date.now() };
+      setUser(userObj);
+      EventoraDB.setUser(userId);
+      const isNew = EventoraDB.getAllEvents().length === 0;
+      if (isNew) EventoraDB.seedDemoData();
       Toast.show('success', `Welcome, ${name.split(' ')[0]}! 🎉`, 'Account created.');
       App.afterAuth();
     }, 700);
@@ -153,7 +164,12 @@ window.AuthModule = (() => {
     const name = mockNames[Math.floor(Math.random() * mockNames.length)];
     const email = name.toLowerCase().replace(' ', '.') + '@gmail.com';
     setTimeout(() => {
-      setUser({ id: EventoraDB.uid(), name, email, loginMethod: 'google', loginAt: Date.now() });
+      const userId = btoa(email).replace(/[^a-z0-9]/gi,'').slice(0,16);
+      const userObj = { id: userId, name, email, loginMethod: 'google', loginAt: Date.now() };
+      setUser(userObj);
+      EventoraDB.setUser(userId);
+      const isNew = EventoraDB.getAllEvents().length === 0;
+      if (isNew) EventoraDB.seedDemoData();
       Toast.show('success', `Signed in as ${name.split(' ')[0]}`, '');
       App.afterAuth();
     }, 600);
@@ -174,7 +190,12 @@ window.AuthModule = (() => {
     if (!otp || otp.length < 4) { Toast.show('warning', 'Enter the OTP', ''); return; }
     const phone = document.getElementById('phoneNumber')?.value?.trim();
     setTimeout(() => {
-      setUser({ id: EventoraDB.uid(), name: 'Guest User', email: '', phone, loginMethod: 'phone', loginAt: Date.now() });
+      const userId = btoa(phone).replace(/[^a-z0-9]/gi,'').slice(0,16);
+      const userObj = { id: userId, name: 'Guest User', email: '', phone, loginMethod: 'phone', loginAt: Date.now() };
+      setUser(userObj);
+      EventoraDB.setUser(userId);
+      const isNew = EventoraDB.getAllEvents().length === 0;
+      if (isNew) EventoraDB.seedDemoData();
       Toast.show('success', 'Phone verified!', '');
       App.afterAuth();
     }, 600);

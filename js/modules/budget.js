@@ -1,5 +1,6 @@
 /**
  * EVENTORA 3.0 — Budget & Payments Module
+ * Supports fully customizable per-event budget categories
  */
 window.BudgetModule = (() => {
   let activeTab = 'expenses';
@@ -11,8 +12,9 @@ window.BudgetModule = (() => {
     const expenses = EventoraDB.getExpenses(evId);
     const budget   = ev?.budget || 0;
     const totalSpent = expenses.reduce((a, b) => a + (b.actual || 0), 0);
-    const remaining = budget - totalSpent;
-    const pct       = budget ? Math.min(100, Math.round(totalSpent / budget * 100)) : 0;
+    const remaining  = budget - totalSpent;
+    const pct        = budget ? Math.min(100, Math.round(totalSpent / budget * 100)) : 0;
+    const categories = EventoraDB.getCategories(evId);
 
     // Category breakdown
     const cats = {};
@@ -25,6 +27,7 @@ window.BudgetModule = (() => {
           <div class="mod-subtitle">${EventoraDB.formatCurrency(totalSpent)} of ${EventoraDB.formatCurrency(budget)} used</div>
         </div>
         <div class="mod-actions">
+          <button class="btn btn-ghost btn-sm" onclick="BudgetModule.manageCategories('${evId}')">🏷️ Categories</button>
           <button class="btn btn-secondary btn-sm" onclick="BudgetModule.editBudget('${evId}')">⚙️ Set Budget</button>
           <button class="btn btn-primary btn-sm" onclick="BudgetModule.openAddExpense('${evId}')">+ Log Expense</button>
         </div>
@@ -61,17 +64,22 @@ window.BudgetModule = (() => {
 
         <!-- Category breakdown bars -->
         <div style="margin-top:20px">
-          <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-subtle);margin-bottom:12px">Spending by Category</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-subtle)">Spending by Category</div>
+            <button class="btn btn-ghost btn-xs" onclick="BudgetModule.manageCategories('${evId}')" style="font-size:11px">✏️ Customize</button>
+          </div>
           ${Object.entries(cats).map(([cat, amt]) => {
             const catPct = budget ? Math.round(amt / budget * 100) : 0;
-            const icons = {Catering:'🍽️',Decor:'🌸',Photography:'📸',Venue:'🏠',Transport:'🚌',Entertainment:'🎵',Security:'🛡️'};
+            const catObj = categories.find(c => c.name === cat);
+            const icon  = catObj?.icon || '💰';
+            const color = catObj?.color || 'var(--brand)';
             return `
             <div class="budget-bar-row">
               <div class="budget-bar-header">
-                <span class="budget-bar-label">${icons[cat]||'💰'} ${cat}</span>
+                <span class="budget-bar-label">${icon} ${cat}</span>
                 <span class="budget-bar-vals">${EventoraDB.formatCurrency(amt)} (${catPct}%)</span>
               </div>
-              <div class="prog-track"><div class="prog-fill brand" style="width:${catPct}%"></div></div>
+              <div class="prog-track"><div class="prog-fill brand" style="width:${catPct}%;background:${color}"></div></div>
             </div>`;
           }).join('') || '<div style="color:var(--text-muted);font-size:13px">No expenses logged yet.</div>'}
         </div>
@@ -124,9 +132,9 @@ window.BudgetModule = (() => {
     </div>`;
 
   const renderPayments = (evId, expenses) => {
-    const paid     = expenses.filter(e => e.status === 'Paid');
-    const pending  = expenses.filter(e => e.status === 'Pending');
-    const due      = expenses.filter(e => e.status === 'Due');
+    const paid    = expenses.filter(e => e.status === 'Paid');
+    const pending = expenses.filter(e => e.status === 'Pending');
+    const due     = expenses.filter(e => e.status === 'Due');
     return `
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">
         ${[
@@ -145,7 +153,7 @@ window.BudgetModule = (() => {
         <div style="padding:16px 20px">
           ${[...due,...pending,...paid].map(e => `
             <div class="payment-row">
-              <div class="payment-icon">${{Catering:'🍽️',Decor:'🌸',Photography:'📸',Venue:'🏠',Transport:'🚌',Entertainment:'🎵',Security:'🛡️'}[e.category]||'💰'}</div>
+              <div class="payment-icon">${{Catering:'🍽️','Catering & Food':'🍽️',Decor:'🌸','Venue & Decor':'🏠',Photography:'📸',Venue:'🏠',Transport:'🚌',Entertainment:'🎵','Entertainment & DJ':'🎵',Security:'🛡️',Invitations:'💌',Contingency:'🛡️'}[e.category]||'💰'}</div>
               <div class="payment-info">
                 <div class="payment-name">${e.description}</div>
                 <div class="payment-date">${e.category} · ${e.status}</div>
@@ -180,13 +188,119 @@ window.BudgetModule = (() => {
       }, 'Save Budget');
   };
 
+  // ── Manage Categories ──────────────────────────────────────────────────
+  const manageCategories = (evId) => {
+    const renderCatList = () => {
+      const cats = EventoraDB.getCategories(evId);
+      return `
+        <div style="margin-bottom:16px">
+          ${cats.map(cat => `
+            <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
+              <span style="font-size:20px;flex-shrink:0">${cat.icon}</span>
+              <span style="flex:1;font-size:14px;font-weight:600;color:var(--text-primary)">${cat.name}</span>
+              <div style="width:12px;height:12px;border-radius:50%;background:${cat.color};flex-shrink:0"></div>
+              <button class="btn btn-ghost btn-xs" style="color:var(--danger);flex-shrink:0" onclick="BudgetModule._deleteCategory('${evId}','${cat.id}')">🗑️</button>
+            </div>`).join('')}
+        </div>
+        <div style="border-top:1px solid var(--border);padding-top:16px">
+          <div style="font-size:13px;font-weight:700;color:var(--text-secondary);margin-bottom:10px">Add New Category</div>
+          <div style="display:flex;gap:8px;align-items:flex-end">
+            <div style="flex-shrink:0">
+              <label class="form-label" style="font-size:11px">Icon</label>
+              <input class="input" id="newCatIcon" value="💡" style="width:60px;text-align:center;font-size:18px">
+            </div>
+            <div style="flex:1">
+              <label class="form-label" style="font-size:11px">Category Name</label>
+              <input class="input" id="newCatName" placeholder="e.g., AV Equipment">
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="BudgetModule._addCategory('${evId}')" style="flex-shrink:0">+ Add</button>
+          </div>
+        </div>`;
+    };
+
+    Modal.open('🏷️ Budget Categories', renderCatList());
+  };
+
+  const _addCategory = (evId) => {
+    const name = document.getElementById('newCatName')?.value?.trim();
+    const icon = document.getElementById('newCatIcon')?.value?.trim() || '💡';
+    if (!name) { Toast.show('warning', 'Enter a category name', ''); return; }
+    const colors = ['#8b5cf6','#ec4899','#06b6d4','#f59e0b','#10b981','#f43f5e','#3b82f6','#a855f7'];
+    const color  = colors[Math.floor(Math.random() * colors.length)];
+    EventoraDB.addCategory(evId, { name, icon, color });
+    Toast.show('success', `Category "${name}" added`, '');
+    // Refresh modal body
+    const cats = EventoraDB.getCategories(evId);
+    const renderCatList = () => {
+      return `
+        <div style="margin-bottom:16px">
+          ${cats.map(cat => `
+            <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
+              <span style="font-size:20px;flex-shrink:0">${cat.icon}</span>
+              <span style="flex:1;font-size:14px;font-weight:600;color:var(--text-primary)">${cat.name}</span>
+              <div style="width:12px;height:12px;border-radius:50%;background:${cat.color};flex-shrink:0"></div>
+              <button class="btn btn-ghost btn-xs" style="color:var(--danger);flex-shrink:0" onclick="BudgetModule._deleteCategory('${evId}','${cat.id}')">🗑️</button>
+            </div>`).join('')}
+        </div>
+        <div style="border-top:1px solid var(--border);padding-top:16px">
+          <div style="font-size:13px;font-weight:700;color:var(--text-secondary);margin-bottom:10px">Add New Category</div>
+          <div style="display:flex;gap:8px;align-items:flex-end">
+            <div style="flex-shrink:0">
+              <label class="form-label" style="font-size:11px">Icon</label>
+              <input class="input" id="newCatIcon" value="💡" style="width:60px;text-align:center;font-size:18px">
+            </div>
+            <div style="flex:1">
+              <label class="form-label" style="font-size:11px">Category Name</label>
+              <input class="input" id="newCatName" placeholder="e.g., AV Equipment">
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="BudgetModule._addCategory('${evId}')" style="flex-shrink:0">+ Add</button>
+          </div>
+        </div>`;
+    };
+    Modal.setBody(renderCatList());
+  };
+
+  const _deleteCategory = (evId, catId) => {
+    EventoraDB.deleteCategory(evId, catId);
+    Toast.show('info', 'Category removed', '');
+    // Re-render list in modal
+    const cats = EventoraDB.getCategories(evId);
+    const html = `
+      <div style="margin-bottom:16px">
+        ${cats.map(cat => `
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
+            <span style="font-size:20px;flex-shrink:0">${cat.icon}</span>
+            <span style="flex:1;font-size:14px;font-weight:600;color:var(--text-primary)">${cat.name}</span>
+            <div style="width:12px;height:12px;border-radius:50%;background:${cat.color};flex-shrink:0"></div>
+            <button class="btn btn-ghost btn-xs" style="color:var(--danger);flex-shrink:0" onclick="BudgetModule._deleteCategory('${evId}','${cat.id}')">🗑️</button>
+          </div>`).join('')}
+      </div>
+      <div style="border-top:1px solid var(--border);padding-top:16px">
+        <div style="font-size:13px;font-weight:700;color:var(--text-secondary);margin-bottom:10px">Add New Category</div>
+        <div style="display:flex;gap:8px;align-items:flex-end">
+          <div style="flex-shrink:0">
+            <label class="form-label" style="font-size:11px">Icon</label>
+            <input class="input" id="newCatIcon" value="💡" style="width:60px;text-align:center;font-size:18px">
+          </div>
+          <div style="flex:1">
+            <label class="form-label" style="font-size:11px">Category Name</label>
+            <input class="input" id="newCatName" placeholder="e.g., AV Equipment">
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="BudgetModule._addCategory('${evId}')" style="flex-shrink:0">+ Add</button>
+        </div>
+      </div>`;
+    Modal.setBody(html);
+    render(evId);
+  };
+
+  // ── Add Expense ────────────────────────────────────────────────────────
   const openAddExpense = (evId) => {
+    const categories = EventoraDB.getCategories(evId);
     Modal.open('Log Expense',
       `<div class="form-group">
         <label class="form-label">Category *</label>
         <select class="input" id="exCat">
-          <option>Catering</option><option>Decor</option><option>Photography</option><option>Venue</option>
-          <option>Transport</option><option>Entertainment</option><option>Security</option><option>Other</option>
+          ${categories.map(c => `<option value="${c.name}">${c.icon} ${c.name}</option>`).join('')}
         </select>
       </div>
       <div class="form-group"><label class="form-label">Description *</label><input class="input" id="exDesc" placeholder="e.g., Catering advance payment"></div>
@@ -201,11 +315,11 @@ window.BudgetModule = (() => {
         const desc = document.getElementById('exDesc')?.value?.trim();
         if (!desc) { Toast.show('warning','Description needed','Enter a description.'); return; }
         EventoraDB.addExpense(evId, {
-          category: document.getElementById('exCat')?.value,
+          category:    document.getElementById('exCat')?.value,
           description: desc,
-          budgeted: parseInt(document.getElementById('exBudgeted')?.value) || 0,
-          actual:   parseInt(document.getElementById('exActual')?.value) || 0,
-          status:   document.getElementById('exStatus')?.value || 'Pending',
+          budgeted:    parseInt(document.getElementById('exBudgeted')?.value) || 0,
+          actual:      parseInt(document.getElementById('exActual')?.value)   || 0,
+          status:      document.getElementById('exStatus')?.value || 'Pending',
         });
         Toast.show('success','Expense Logged', desc);
         render(evId);
@@ -219,15 +333,10 @@ window.BudgetModule = (() => {
   };
 
   const markPaid = (evId, eId) => {
-    EventoraDB.getExpenses(evId).forEach(e => {
-      if (e.id === eId) EventoraDB.addExpense(evId, { ...e, status:'Paid' });
-    });
-    // Simpler: find and update
-    const expenses = EventoraDB.getExpenses(evId);
-    // We need to access db directly — use deleteExpense + addExpense as workaround
+    EventoraDB.updateExpense(evId, eId, { status: 'Paid' });
     Toast.show('success','Marked as Paid','');
     render(evId);
   };
 
-  return { render, setTab, editBudget, openAddExpense, deleteExpense, markPaid };
+  return { render, setTab, editBudget, openAddExpense, deleteExpense, markPaid, manageCategories, _addCategory, _deleteCategory };
 })();
