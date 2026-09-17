@@ -33,16 +33,19 @@ window.EventoraSupabase = {
             try {
                 this.client = window.supabase.createClient(url, key, {
                     auth: {
-                        // Use PKCE flow — required for SPAs with OAuth
+                        // PKCE flow for SPA OAuth security
                         flowType: 'pkce',
-                        // Automatically detect and handle ?code= in URL on page load
-                        detectSessionInUrl: true,
-                        // Persist session in localStorage (safe with anon key only)
+                        // We handle ?code= exchange manually in auth.js (exactly once).
+                        // Setting this to true would cause a double-exchange race condition:
+                        //   detectSessionInUrl fires in <head> (async, not yet complete)
+                        //   auth.js init() also calls exchangeCodeForSession on DOMContentLoaded
+                        //   Second exchange fails → error handler → goAuth('login') → loop
+                        detectSessionInUrl: false,
                         persistSession: true,
-                        // Auto-refresh tokens before they expire
                         autoRefreshToken: true,
                     }
                 });
+
                 // Store connection promise (for legacy Supabase DB features)
                 this.connectionPromise = this.testConnection(false).then(result => {
                     if (result && result.success) {

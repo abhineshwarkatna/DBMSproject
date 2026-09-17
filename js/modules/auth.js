@@ -1,27 +1,33 @@
 /**
- * EVENTORA — Real Authentication Module
- * Uses Supabase Auth as single source of truth.
+ * EVENTORA — Authentication Module
+ * Source of truth: Supabase Auth
  *
- * ROOT CAUSE FIX (Google OAuth Login Loop):
- * Supabase JS v2 uses PKCE flow by default. After Google redirects back,
- * the URL contains ?code=... which MUST be exchanged for a session via
- * exchangeCodeForSession(). Without this, getSession() returns null and
- * the app incorrectly redirects to the login page — causing the loop.
+ * ARCHITECTURE:
+ *  supabaseClient.js  → createClient with flowType:'pkce', detectSessionInUrl:false
+ *  auth.js init()     → manually checks ?code= ONCE → exchangeCodeForSession → getSession
+ *  onAuthStateChange  → keeps UI in sync after login/logout/token refresh
  *
- * This module handles the full OAuth callback correctly.
+ * WHY detectSessionInUrl:false?
+ *  With detectSessionInUrl:true, the Supabase client starts an async exchange in <head>.
+ *  auth.js (bottom of <body>) then also calls exchangeCodeForSession on DOMContentLoaded.
+ *  The second exchange fails (code already consumed) → error handler → goAuth('login') → loop.
+ *  Solution: turn off automatic detection and handle it exactly once, here.
  */
 window.AuthModule = (() => {
 
-  // ── Supabase client accessor ───────────────────────────────────────────
+  // ── Supabase client accessor ──────────────────────────────────────────
   const sb = () => window.EventoraSupabase?.client;
 
-  // ── In-memory state ───────────────────────────────────────────────────
-  let _currentUser = null;
+  // ── In-memory auth state ──────────────────────────────────────────────
+  let _currentUser    = null;
+  let _profile        = null;   // public.profiles row
+  let _listenerActive = false;  // guard against double-listener registration
 
   const getUser    = () => _currentUser;
+  const getProfile = () => _profile;
   const isLoggedIn = () => !!_currentUser;
 
-  // ── Human-readable error mapping ──────────────────────────────────────
+  // ── Human-readable error messages ─────────────────────────────────────
   const _friendlyError = (err) => {
     if (!err) return 'Something went wrong. Please try again.';
     const msg = (err.message || '').toLowerCase();
@@ -39,139 +45,186 @@ window.AuthModule = (() => {
       return 'Too many attempts. Please wait a moment and try again.';
     if (msg.includes('network') || msg.includes('fetch'))
       return 'Network error. Check your connection and try again.';
-    if (msg.includes('pkce') || msg.includes('code') || msg.includes('exchange'))
-      return 'Google sign-in could not be completed. Please try again.';
     return 'Something went wrong. Please try again.';
   };
 
-  // ── Auth State Listener ────────────────────────────────────────────────
-  // Reacts to SIGNED_IN, SIGNED_OUT, TOKEN_REFRESHED, PASSWORD_RECOVERY
+  // ── Profile sync — upsert authenticated user into public.profiles ─────
+  // Called after every sign-in so Google users get their profile stored.
+  const _syncProfile = async (user) => {
+    if (!user) return null;
+    const client = sb();
+    if (!client) return null;
+
+    const profileData = {
+      id:         user.id,
+      full_name:  user.user_metadata?.full_name
+                  || user.user_metadata?.name
+                  || user.email?.split('@')[0]
+                  || '',
+      email:      user.email || '',
+      avatar_url: user.user_metadata?.avatar_url
+                  || user.user_metadata?.picture
+                  || '',
+      updated_at: new Date().toISOString(),
+    };
+
+    const { data, error } = await client
+      .from('profiles')
+      .upsert(profileData, { onConflict: 'id' })
+      .select()
+      .single();
+
+    if (error) {
+      // Table may not exist yet — log but don't block the user
+      console.warn('[Eventora] Profile sync failed:', error.message,
+        '— Run data/rls_migration.sql in Supabase SQL Editor to create the profiles table.');
+    } else {
+      _profile = data;
+      console.log('[Eventora] Profile synced:', data.email);
+    }
+
+    return data || null;
+  };
+
+  // ── Persistent auth state listener ────────────────────────────────────
+  // Handles state changes AFTER initial load (token refresh, logout, etc.)
   const _initStateListener = () => {
+    if (_listenerActive) return;
+    _listenerActive = true;
     const client = sb();
     if (!client) return;
 
     client.auth.onAuthStateChange(async (event, session) => {
-      console.log('[Eventora Auth] State change:', event, session?.user?.email || 'no user');
+      console.log('[Eventora Auth] →', event, session?.user?.email || '(no user)');
       const user = session?.user ?? null;
-      _currentUser = user;
 
       if (event === 'SIGNED_IN' && user) {
+        _currentUser = user;
         EventoraDB.setUser(user.id);
+        await _syncProfile(user);
         updateNavActions();
         updateSidebarUser();
-        // Only seed if this is a brand new user with no events
         if (EventoraDB.getAllEvents().length === 0) EventoraDB.seedDemoData();
-        // Route to app (safe to call multiple times — it's idempotent)
         App.afterAuth();
       }
 
       if (event === 'SIGNED_OUT') {
         _currentUser = null;
+        _profile     = null;
         EventoraDB.setUser(null);
         updateNavActions();
         updateSidebarUser();
         App.goAuth('login');
       }
 
-      if (event === 'PASSWORD_RECOVERY') {
-        // Show password reset form when user clicks email link
-        App.goAuth('login');
-        setTimeout(() => showForm('authReset'), 100);
+      if (event === 'TOKEN_REFRESHED' && user) {
+        _currentUser = user;
       }
 
-      if (event === 'TOKEN_REFRESHED') {
-        _currentUser = user;
+      if (event === 'PASSWORD_RECOVERY') {
+        App.goAuth('login');
+        setTimeout(() => showForm('authReset'), 150);
       }
     });
   };
 
-  // ── MAIN INIT — handles OAuth callback AND regular session restore ─────
+  // ── MAIN INIT ─────────────────────────────────────────────────────────
+  // Called once from app.js DOMContentLoaded.
+  // Handles:  ?error= (OAuth failure)
+  //           ?code=  (PKCE exchange — exactly once)
+  //           normal page load / refresh (session restore)
   const init = async () => {
     const client = sb();
     if (!client) {
-      console.warn('[Eventora Auth] Supabase client not available — showing login.');
+      console.warn('[Eventora Auth] Supabase client not ready — showing login.');
       App.goAuth('login');
       return;
     }
 
-    // Register the auth state listener FIRST, before any session check
-    _initStateListener();
+    const params = new URLSearchParams(window.location.search);
 
-    // ── STEP 1: Handle OAuth callback (?code= or ?error= in URL) ─────────
-    const urlParams = new URLSearchParams(window.location.search);
-    const code      = urlParams.get('code');
-    const errorParam = urlParams.get('error');
-    const errorDesc  = urlParams.get('error_description');
-
-    if (errorParam) {
-      // OAuth returned an error (e.g., user denied access)
-      console.error('[Eventora Auth] OAuth error:', errorParam, errorDesc);
-      // Clean the URL
-      window.history.replaceState({}, document.title, window.location.pathname);
+    // ── Case 1: OAuth returned an error ───────────────────────────────────
+    if (params.get('error')) {
+      const code = params.get('error');
+      const desc = params.get('error_description') || '';
+      console.error('[Eventora Auth] OAuth error:', code, desc);
+      _cleanUrl();
+      _initStateListener();
       App.goAuth('login');
-      const errEl = document.getElementById('loginError');
-      if (errEl) {
-        errEl.textContent = errorParam === 'access_denied'
+      _showLoginError(
+        code === 'access_denied'
           ? 'Google sign-in was cancelled. Please try again.'
-          : 'Google sign-in could not be completed. Please try again.';
-        errEl.style.display = 'block';
-      }
+          : 'Google sign-in could not be completed. Please try again.'
+      );
       return;
     }
 
-    if (code) {
-      // ── PKCE: exchange the code for a real session ─────────────────────
-      console.log('[Eventora Auth] OAuth code detected — exchanging for session…');
+    // ── Case 2: PKCE callback — ?code= present → exchange exactly once ───
+    const oauthCode = params.get('code');
+    if (oauthCode) {
+      console.log('[Eventora Auth] PKCE code detected — exchanging for session…');
+      _cleanUrl(); // remove ?code= immediately so refresh doesn't re-exchange
+
       try {
-        const { data, error } = await client.auth.exchangeCodeForSession(code);
+        const { data, error } = await client.auth.exchangeCodeForSession(oauthCode);
+
         if (error) {
           console.error('[Eventora Auth] Code exchange failed:', error.message);
-          // Clean the URL and show friendly error
-          window.history.replaceState({}, document.title, window.location.pathname);
+          _initStateListener();
           App.goAuth('login');
-          const errEl = document.getElementById('loginError');
-          if (errEl) {
-            errEl.textContent = 'Google sign-in could not be completed. Please try again.';
-            errEl.style.display = 'block';
-          }
+          _showLoginError('Google sign-in could not be completed. Please try again.');
           return;
         }
 
-        // Code exchanged successfully — session is now active
-        // onAuthStateChange (SIGNED_IN) fires automatically and routes to dashboard
-        // Clean the ?code= from URL so refresh doesn't re-exchange
-        window.history.replaceState({}, document.title, window.location.pathname);
-        console.log('[Eventora Auth] Code exchanged — session active for:', data.user?.email);
-        // Don't call getSession again — onAuthStateChange will handle routing
-        return;
+        // Exchange succeeded — session is now active in the Supabase client
+        const user = data.session?.user;
+        console.log('[Eventora Auth] Code exchanged ✓ User:', user?.email);
+
+        if (user) {
+          _currentUser = user;
+          EventoraDB.setUser(user.id);
+          await _syncProfile(user);   // upsert into public.profiles
+          updateNavActions();
+          updateSidebarUser();
+          if (EventoraDB.getAllEvents().length === 0) EventoraDB.seedDemoData();
+          _initStateListener();
+          App.afterAuth();            // routes to dashboard (or pending action)
+        } else {
+          _initStateListener();
+          App.goAuth('login');
+        }
 
       } catch (err) {
         console.error('[Eventora Auth] exchangeCodeForSession threw:', err);
-        window.history.replaceState({}, document.title, window.location.pathname);
+        _initStateListener();
         App.goAuth('login');
-        return;
+        _showLoginError('Google sign-in could not be completed. Please try again.');
       }
+      return;
     }
 
-    // ── STEP 2: No OAuth code — regular session check (page reload, direct visit)
-    const { data: { session }, error: sessionError } = await client.auth.getSession();
+    // ── Case 3: Normal page load / refresh — restore existing session ─────
+    _initStateListener(); // register listener before getSession so no events are missed
 
-    if (sessionError) {
-      console.error('[Eventora Auth] getSession error:', sessionError.message);
+    const { data: { session }, error } = await client.auth.getSession();
+
+    if (error) {
+      console.error('[Eventora Auth] getSession error:', error.message);
       App.goAuth('login');
       return;
     }
 
     if (session?.user) {
-      _currentUser = session.user;
-      EventoraDB.setUser(session.user.id);
-      if (EventoraDB.getAllEvents().length === 0) EventoraDB.seedDemoData();
+      const user = session.user;
+      _currentUser = user;
+      EventoraDB.setUser(user.id);
+      await _syncProfile(user);
       updateNavActions();
       updateSidebarUser();
-      console.log('[Eventora Auth] Session restored for:', session.user.email);
+      if (EventoraDB.getAllEvents().length === 0) EventoraDB.seedDemoData();
+      console.log('[Eventora Auth] Session restored for:', user.email);
       App.afterAuth();
     } else {
-      _currentUser = null;
       console.log('[Eventora Auth] No session — showing login.');
       App.goAuth('login');
     }
@@ -184,8 +237,7 @@ window.AuthModule = (() => {
     const btn      = document.getElementById('loginBtn');
     const errEl    = document.getElementById('loginError');
 
-    if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
-
+    _hideError(errEl);
     if (!email)    { _showError(errEl, 'Please enter your email.'); return; }
     if (!password) { _showError(errEl, 'Please enter your password.'); return; }
 
@@ -200,7 +252,7 @@ window.AuthModule = (() => {
       return;
     }
 
-    // onAuthStateChange (SIGNED_IN) handles routing to dashboard
+    // onAuthStateChange(SIGNED_IN) handles profile sync + routing
     Toast.show('success', 'Welcome back!', '');
   };
 
@@ -213,13 +265,12 @@ window.AuthModule = (() => {
     const btn      = document.getElementById('signupBtn');
     const errEl    = document.getElementById('signupError');
 
-    if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
-
-    if (!name)     { _showError(errEl, 'Please enter your full name.'); return; }
-    if (!email)    { _showError(errEl, 'Please enter your email.'); return; }
-    if (!password) { _showError(errEl, 'Please enter a password.'); return; }
-    if (password.length < 6) { _showError(errEl, 'Password must be at least 6 characters.'); return; }
-    if (password !== confirm) { _showError(errEl, 'Passwords do not match.'); return; }
+    _hideError(errEl);
+    if (!name)              { _showError(errEl, 'Please enter your full name.'); return; }
+    if (!email)             { _showError(errEl, 'Please enter your email.'); return; }
+    if (!password)          { _showError(errEl, 'Please enter a password.'); return; }
+    if (password.length < 6){ _showError(errEl, 'Password must be at least 6 characters.'); return; }
+    if (password !== confirm){ _showError(errEl, 'Passwords do not match.'); return; }
 
     _setLoading(btn, 'Creating account…');
 
@@ -228,53 +279,41 @@ window.AuthModule = (() => {
       password,
       options: {
         data: { full_name: name },
-        emailRedirectTo: window.location.origin + window.location.pathname
+        emailRedirectTo: window.location.origin + '/'
       }
     });
 
     _setLoading(btn, 'Create Account', false);
 
-    if (error) {
-      _showError(errEl, _friendlyError(error));
-      return;
-    }
+    if (error) { _showError(errEl, _friendlyError(error)); return; }
 
-    // If email confirmation required, show success screen
-    // If auto-confirmed (disabled confirmation), onAuthStateChange routes to dashboard
     if (data?.user && !data.session) {
+      // Email confirmation required
       _showEmailSent(email);
     }
+    // If email confirmation disabled, onAuthStateChange(SIGNED_IN) routes to app
   };
 
-  // ── Google OAuth Login ────────────────────────────────────────────────
-  // Uses PKCE flow — after Google auth, Supabase redirects back with ?code=
-  // The init() function handles exchanging that code for a session.
+  // ── Google OAuth ──────────────────────────────────────────────────────
+  // Uses PKCE: Google → Supabase → redirects back with ?code= → init() exchanges it
   const googleLogin = async () => {
     const client = sb();
-    if (!client) {
-      Toast.show('error', 'Not connected', 'Please check your connection.');
-      return;
-    }
+    if (!client) { Toast.show('error', 'Not connected', 'Please check your connection.'); return; }
 
-    // Determine correct redirect URL for current environment
-    const redirectTo = window.location.origin + window.location.pathname;
-
-    console.log('[Eventora Auth] Starting Google OAuth, redirectTo:', redirectTo);
+    // Use origin only — cleaner redirect URL, works for both prod and local
+    const redirectTo = window.location.origin + '/';
+    console.log('[Eventora Auth] Starting Google OAuth → redirectTo:', redirectTo);
 
     const { error } = await client.auth.signInWithOAuth({
       provider: 'google',
-      options: {
-        redirectTo,
-        // Do NOT pass skipBrowserRedirect: true — we want the browser to redirect
-      }
+      options: { redirectTo }
     });
 
     if (error) {
-      console.error('[Eventora Auth] Google OAuth error:', error.message);
+      console.error('[Eventora Auth] signInWithOAuth error:', error.message);
       Toast.show('error', 'Google sign-in failed', 'Please try again.');
     }
-    // If no error: browser will redirect to Google, then back to this page
-    // init() will handle the ?code= parameter on return
+    // On success: browser navigates to Google, then back to redirectTo?code=...
   };
 
   // ── Forgot Password ───────────────────────────────────────────────────
@@ -283,18 +322,17 @@ window.AuthModule = (() => {
     const btn   = document.getElementById('forgotBtn');
     const errEl = document.getElementById('forgotError');
 
-    if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
+    _hideError(errEl);
     if (!email) { _showError(errEl, 'Please enter your email.'); return; }
 
     _setLoading(btn, 'Sending…');
 
     await sb().auth.resetPasswordForEmail(email, {
-      redirectTo: window.location.origin + window.location.pathname + '?reset=1'
+      redirectTo: window.location.origin + '/?reset=1'
     });
 
     _setLoading(btn, 'Send Reset Link', false);
 
-    // Always show success — never reveal if email exists
     const panel = document.getElementById('authForgot');
     if (panel) panel.innerHTML = `
       <div class="auth-success-state">
@@ -305,14 +343,14 @@ window.AuthModule = (() => {
       </div>`;
   };
 
-  // ── Password Reset (after clicking the link in email) ─────────────────
+  // ── Password Reset ────────────────────────────────────────────────────
   const resetPassword = async () => {
     const password = document.getElementById('resetPassword')?.value;
     const confirm  = document.getElementById('resetConfirm')?.value;
     const btn      = document.getElementById('resetBtn');
     const errEl    = document.getElementById('resetError');
 
-    if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
+    _hideError(errEl);
     if (!password || password.length < 6) { _showError(errEl, 'Password must be at least 6 characters.'); return; }
     if (password !== confirm)              { _showError(errEl, 'Passwords do not match.'); return; }
 
@@ -324,7 +362,7 @@ window.AuthModule = (() => {
 
     if (error) { _showError(errEl, _friendlyError(error)); return; }
 
-    Toast.show('success', 'Password updated!', 'You can now sign in with your new password.');
+    Toast.show('success', 'Password updated!', 'Sign in with your new password.');
     await sb().auth.signOut();
     showLogin();
   };
@@ -333,25 +371,20 @@ window.AuthModule = (() => {
   const logout = async () => {
     console.log('[Eventora Auth] Signing out…');
     await sb().auth.signOut();
-    // onAuthStateChange (SIGNED_OUT) clears state and redirects to login
+    // onAuthStateChange(SIGNED_OUT) clears state and redirects to login
   };
 
-  // ── Nav & Sidebar UI Updates ──────────────────────────────────────────
+  // ── Nav & Sidebar ─────────────────────────────────────────────────────
   const updateNavActions = () => {
     const el = document.getElementById('navActions');
     if (!el) return;
     if (_currentUser) {
-      const name   = _currentUser.user_metadata?.full_name
-                   || _currentUser.user_metadata?.name
-                   || _currentUser.email?.split('@')[0]
-                   || 'Account';
-      const avatar = _currentUser.user_metadata?.avatar_url
-                   || _currentUser.user_metadata?.picture;
+      const meta   = _currentUser.user_metadata || {};
+      const name   = meta.full_name || meta.name || _currentUser.email?.split('@')[0] || 'Account';
+      const avatar = meta.avatar_url || meta.picture || '';
       el.innerHTML = `
         <div class="nav-user-chip" onclick="AuthModule.showUserMenu()">
-          ${avatar
-            ? `<img src="${avatar}" class="nav-user-avatar-img" alt="${name}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
-            : ''}
+          ${avatar ? `<img src="${avatar}" class="nav-user-avatar-img" alt="${name}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">` : ''}
           <div class="nav-user-avatar" style="${avatar ? 'display:none' : ''}">${name.charAt(0).toUpperCase()}</div>
           <span class="nav-user-name">${name.split(' ')[0]}</span>
           <span style="font-size:10px;color:var(--text-muted)">▾</span>
@@ -368,13 +401,10 @@ window.AuthModule = (() => {
     const el = document.getElementById('sidebarUserRow');
     if (!el) return;
     if (_currentUser) {
-      const name   = _currentUser.user_metadata?.full_name
-                   || _currentUser.user_metadata?.name
-                   || _currentUser.email?.split('@')[0]
-                   || 'User';
+      const meta   = _currentUser.user_metadata || {};
+      const name   = meta.full_name || meta.name || _currentUser.email?.split('@')[0] || 'User';
       const email  = _currentUser.email || '';
-      const avatar = _currentUser.user_metadata?.avatar_url
-                   || _currentUser.user_metadata?.picture;
+      const avatar = meta.avatar_url || meta.picture || '';
       el.innerHTML = `
         <div class="sidebar-user-info">
           ${avatar
@@ -391,11 +421,12 @@ window.AuthModule = (() => {
     }
   };
 
-  // ── User Account Menu ─────────────────────────────────────────────────
+  // ── User Menu ─────────────────────────────────────────────────────────
   const showUserMenu = () => {
     const user = _currentUser;
     if (!user) return;
-    const name  = user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0];
+    const meta  = user.user_metadata || {};
+    const name  = meta.full_name || meta.name || user.email?.split('@')[0];
     const email = user.email || '';
     Modal.open('Your Account',
       `<div style="text-align:center;padding:8px 0">
@@ -410,17 +441,29 @@ window.AuthModule = (() => {
   const showProfile = () => {
     const user = _currentUser;
     if (!user) return;
-    const name  = user.user_metadata?.full_name || user.user_metadata?.name || '';
+    const meta  = user.user_metadata || {};
+    const name  = meta.full_name || meta.name || '';
     const email = user.email || '';
     Modal.open('Profile Settings',
-      `<div class="form-group"><label class="form-label">Full Name</label><input class="input" id="profileName" value="${name}"></div>
-       <div class="form-group"><label class="form-label">Email</label><input class="input" value="${email}" type="email" disabled style="opacity:0.6"></div>`,
+      `<div class="form-group">
+        <label class="form-label">Full Name</label>
+        <input class="input" id="profileName" value="${name}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email</label>
+        <input class="input" value="${email}" type="email" disabled style="opacity:0.6">
+      </div>`,
       async () => {
         const newName = document.getElementById('profileName')?.value?.trim();
         if (newName) {
           const { error } = await sb().auth.updateUser({ data: { full_name: newName } });
           if (!error) {
-            _currentUser = { ..._currentUser, user_metadata: { ..._currentUser.user_metadata, full_name: newName } };
+            _currentUser = {
+              ..._currentUser,
+              user_metadata: { ..._currentUser.user_metadata, full_name: newName }
+            };
+            // Sync updated name to profiles table
+            await _syncProfile(_currentUser);
             updateNavActions();
             updateSidebarUser();
             Toast.show('success', 'Profile saved', '');
@@ -429,7 +472,7 @@ window.AuthModule = (() => {
       }, 'Save Changes');
   };
 
-  // ── Form Visibility ───────────────────────────────────────────────────
+  // ── Form Switching ────────────────────────────────────────────────────
   const showForm = (id) => {
     ['authLogin', 'authSignup', 'authForgot', 'authReset'].forEach(f => {
       const el = document.getElementById(f);
@@ -441,7 +484,7 @@ window.AuthModule = (() => {
   const showSignup = () => showForm('authSignup');
   const showForgot = () => showForm('authForgot');
 
-  // ── Email Verification Sent Screen ───────────────────────────────────
+  // ── Email Verification Sent Screen ────────────────────────────────────
   const _showEmailSent = (email) => {
     const panel = document.getElementById('authSignup');
     if (!panel) return;
@@ -456,10 +499,21 @@ window.AuthModule = (() => {
   };
 
   // ── Helpers ───────────────────────────────────────────────────────────
+  const _cleanUrl = () =>
+    window.history.replaceState({}, document.title, window.location.pathname);
+
+  const _showLoginError = (msg) => {
+    const errEl = document.getElementById('loginError');
+    if (errEl) { errEl.textContent = msg; errEl.style.display = 'block'; }
+  };
+
   const _showError = (el, msg) => {
     if (!el) { Toast.show('warning', msg, ''); return; }
-    el.textContent    = msg;
-    el.style.display  = 'block';
+    el.textContent = msg; el.style.display = 'block';
+  };
+
+  const _hideError = (el) => {
+    if (el) { el.textContent = ''; el.style.display = 'none'; }
   };
 
   const _setLoading = (btn, label, loading = true) => {
@@ -476,7 +530,7 @@ window.AuthModule = (() => {
   };
 
   return {
-    init, isLoggedIn, getUser, logout,
+    init, isLoggedIn, getUser, getProfile, logout,
     updateNavActions, updateSidebarUser,
     showLogin, showSignup, showForgot,
     login, signup, googleLogin, sendReset, resetPassword,
