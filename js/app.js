@@ -337,20 +337,21 @@ window.App = (() => {
     if (navItem) { switchTab(navItem.dataset.tab); }
   });
 
-  // Init
-  document.addEventListener('DOMContentLoaded', () => {
+  // Init — async so we can await Supabase session before routing
+  document.addEventListener('DOMContentLoaded', async () => {
+    // Show loading splash while Supabase checks the session
+    const loadingEl = document.getElementById('view-loading');
+    if (loadingEl) loadingEl.classList.add('active');
+
     EventoraDB.init();
     initNavScroll();
-    AuthModule.init();
 
-    // Restore session if user was previously logged in
-    const existingUser = AuthModule.getUser();
-    if (existingUser) {
-      EventoraDB.setUser(existingUser.id);
-      goDashboard();
-    } else {
-      goAuth('login');
-    }
+    // AuthModule.init() calls supabase.auth.getSession() and routes accordingly
+    // It handles SIGNED_IN / SIGNED_OUT via onAuthStateChange
+    await AuthModule.init();
+
+    // Hide loading splash (AuthModule.init already called goAuth or goDashboard)
+    if (loadingEl) loadingEl.classList.remove('active');
 
     setTimeout(initScrollReveal, 300);
   });

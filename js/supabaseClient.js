@@ -367,7 +367,5 @@ window.EventoraSupabase = {
     }
 };
 
-// Auto-init when DOM is ready
-document.addEventListener('DOMContentLoaded', () => {
-    window.EventoraSupabase.init();
-});
+// Auto-init immediately (Supabase CDN is loaded in <head> before this script)
+window.EventoraSupabase.init();

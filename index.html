@@ -15,10 +15,24 @@
   <link rel="stylesheet" href="styles/main.css">
   <link rel="stylesheet" href="styles/animations.css">
   <link rel="stylesheet" href="styles/components.css">
+  <!-- Supabase JS Client (CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script src="js/supabaseClient.js"></script>
+
 </head>
 <body>
 
 <div class="app-root">
+
+<!-- ══════════════════════════════════════════════════════════════════
+     VIEW: LOADING (shown while Supabase checks session)
+══════════════════════════════════════════════════════════════════════ -->
+<div id="view-loading" class="view loading-view">
+  <div class="loading-content">
+    <img src="assets/logo.png" alt="Eventora" style="height:64px;object-fit:contain;animation:loadingPulse 1.4s ease-in-out infinite">
+    <div class="loading-dots"><span></span><span></span><span></span></div>
+  </div>
+</div>
 
 <!-- ══════════════════════════════════════════════════════════════════
      VIEW: AUTH (Login / Sign Up)
@@ -90,16 +104,24 @@
     <!-- Right Panel — Forms -->
     <div class="auth-form-panel">
       <!-- Login Form -->
-      <div class="auth-form" id="authLogin">
-        <div class="auth-form-logo" onclick="App.goHome()">
+      <div class="auth-form" id="authLogin" style="display:flex">
+        <div class="auth-form-logo" onclick="App.goAuth('login')">
           <img src="assets/logo.png" alt="Eventora" style="height:36px;width:auto;object-fit:contain">
         </div>
         <h1 class="auth-title">Welcome back</h1>
-        <p class="auth-subtitle">Sign in to your account</p>
+        <p class="auth-subtitle">Sign in to continue planning your events.</p>
+
+        <button class="btn btn-social btn-full" onclick="AuthModule.googleLogin()">
+          <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+          Continue with Google
+        </button>
+
+        <div class="auth-divider"><span>or</span></div>
 
         <div class="form-group">
           <label class="form-label" for="loginEmail">Email</label>
-          <input class="input" id="loginEmail" type="email" placeholder="you@example.com" autocomplete="email">
+          <input class="input" id="loginEmail" type="email" placeholder="you@example.com" autocomplete="email"
+                 onkeydown="if(event.key==='Enter')AuthModule.login()">
         </div>
         <div class="form-group">
           <label class="form-label" for="loginPassword">
@@ -107,22 +129,15 @@
             <span class="form-label-link" onclick="AuthModule.showForgot()">Forgot password?</span>
           </label>
           <div style="position:relative">
-            <input class="input" id="loginPassword" type="password" placeholder="Enter your password" autocomplete="current-password">
+            <input class="input" id="loginPassword" type="password" placeholder="Enter your password" autocomplete="current-password"
+                   onkeydown="if(event.key==='Enter')AuthModule.login()">
             <button class="pwd-toggle" onclick="AuthModule.togglePwd('loginPassword',this)" tabindex="-1">👁</button>
           </div>
         </div>
 
+        <div class="auth-error" id="loginError" style="display:none"></div>
+
         <button class="btn btn-primary btn-full btn-lg" id="loginBtn" onclick="AuthModule.login()">Sign In</button>
-
-        <div class="auth-divider"><span>or</span></div>
-
-        <button class="btn btn-social btn-full" onclick="AuthModule.googleLogin()">
-          <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-          Continue with Google
-        </button>
-        <button class="btn btn-social btn-full mt-2" onclick="AuthModule.phoneLogin()">
-          📱 Continue with Phone
-        </button>
 
         <div class="auth-switch">
           Don't have an account?
@@ -132,15 +147,22 @@
 
       <!-- Sign Up Form -->
       <div class="auth-form" id="authSignup" style="display:none">
-        <div class="auth-form-logo" onclick="App.goHome()">
+        <div class="auth-form-logo" onclick="App.goAuth('login')">
           <img src="assets/logo.png" alt="Eventora" style="height:36px;width:auto;object-fit:contain">
         </div>
         <h1 class="auth-title">Create account</h1>
-        <p class="auth-subtitle">Free forever. No credit card needed.</p>
+        <p class="auth-subtitle">Free forever. Start planning your first event.</p>
+
+        <button class="btn btn-social btn-full" onclick="AuthModule.googleLogin()">
+          <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+          Continue with Google
+        </button>
+
+        <div class="auth-divider"><span>or</span></div>
 
         <div class="form-group">
           <label class="form-label" for="signupName">Full Name</label>
-          <input class="input" id="signupName" type="text" placeholder="Your name" autocomplete="name">
+          <input class="input" id="signupName" type="text" placeholder="Your full name" autocomplete="name">
         </div>
         <div class="form-group">
           <label class="form-label" for="signupEmail">Email</label>
@@ -155,17 +177,13 @@
         </div>
         <div class="form-group">
           <label class="form-label" for="signupConfirm">Confirm Password</label>
-          <input class="input" id="signupConfirm" type="password" placeholder="Re-enter password" autocomplete="new-password">
+          <input class="input" id="signupConfirm" type="password" placeholder="Re-enter password" autocomplete="new-password"
+                 onkeydown="if(event.key==='Enter')AuthModule.signup()">
         </div>
 
-        <button class="btn btn-primary btn-full btn-lg" onclick="AuthModule.signup()">Create Account</button>
+        <div class="auth-error" id="signupError" style="display:none"></div>
 
-        <div class="auth-divider"><span>or</span></div>
-
-        <button class="btn btn-social btn-full" onclick="AuthModule.googleLogin()">
-          <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-          Continue with Google
-        </button>
+        <button class="btn btn-primary btn-full btn-lg" id="signupBtn" onclick="AuthModule.signup()">Create Account</button>
 
         <div class="auth-switch">
           Already have an account?
@@ -173,46 +191,46 @@
         </div>
       </div>
 
-      <!-- Phone OTP Form -->
-      <div class="auth-form" id="authPhone" style="display:none">
-        <button class="auth-back-btn" onclick="AuthModule.showLogin()">← Back</button>
-        <h1 class="auth-title">Phone Sign In</h1>
-        <p class="auth-subtitle">We'll send a one-time code</p>
-        <div class="form-group" id="phoneStep1">
-          <label class="form-label">Phone Number</label>
-          <div style="display:flex;gap:8px">
-            <select class="input" style="width:90px;flex-shrink:0">
-              <option>+91</option><option>+1</option><option>+44</option><option>+65</option>
-            </select>
-            <input class="input" id="phoneNumber" type="tel" placeholder="10-digit number" style="flex:1">
-          </div>
-          <button class="btn btn-primary btn-full mt-3" onclick="AuthModule.sendOtp()">Send OTP</button>
-        </div>
-        <div class="form-group" id="phoneStep2" style="display:none">
-          <label class="form-label">Enter OTP sent to your phone</label>
-          <input class="input" id="otpInput" type="text" placeholder="6-digit code" maxlength="6" style="letter-spacing:0.2em;text-align:center;font-size:22px;font-family:var(--font-mono)">
-          <button class="btn btn-primary btn-full mt-3" onclick="AuthModule.verifyOtp()">Verify & Sign In</button>
-          <div style="text-align:center;margin-top:12px;font-size:13px;color:var(--text-muted)">
-            Didn't get the code? <span style="color:var(--brand);cursor:pointer;font-weight:600" onclick="AuthModule.sendOtp()">Resend</span>
-          </div>
-        </div>
       </div>
 
       <!-- Forgot Password -->
       <div class="auth-form" id="authForgot" style="display:none">
-        <button class="auth-back-btn" onclick="AuthModule.showLogin()">← Back</button>
-        <h1 class="auth-title">Reset password</h1>
-        <p class="auth-subtitle">We'll send a reset link to your email</p>
+        <button class="auth-back-btn" onclick="AuthModule.showLogin()">← Back to Sign In</button>
+        <h1 class="auth-title">Forgot password?</h1>
+        <p class="auth-subtitle">Enter your email and we'll send you a reset link.</p>
         <div class="form-group">
-          <label class="form-label">Email</label>
-          <input class="input" id="forgotEmail" type="email" placeholder="you@example.com">
+          <label class="form-label" for="forgotEmail">Email</label>
+          <input class="input" id="forgotEmail" type="email" placeholder="you@example.com"
+                 onkeydown="if(event.key==='Enter')AuthModule.sendReset()">
         </div>
-        <button class="btn btn-primary btn-full" onclick="AuthModule.sendReset()">Send Reset Link</button>
+        <div class="auth-error" id="forgotError" style="display:none"></div>
+        <button class="btn btn-primary btn-full" id="forgotBtn" onclick="AuthModule.sendReset()">Send Reset Link</button>
+      </div>
+
+      <!-- Reset Password (after clicking email link) -->
+      <div class="auth-form" id="authReset" style="display:none">
+        <h1 class="auth-title">Set new password</h1>
+        <p class="auth-subtitle">Choose a strong password for your account.</p>
+        <div class="form-group">
+          <label class="form-label" for="resetPassword">New Password</label>
+          <div style="position:relative">
+            <input class="input" id="resetPassword" type="password" placeholder="Min. 6 characters" autocomplete="new-password">
+            <button class="pwd-toggle" onclick="AuthModule.togglePwd('resetPassword',this)" tabindex="-1">👁</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="resetConfirm">Confirm Password</label>
+          <input class="input" id="resetConfirm" type="password" placeholder="Re-enter password"
+                 onkeydown="if(event.key==='Enter')AuthModule.resetPassword()">
+        </div>
+        <div class="auth-error" id="resetError" style="display:none"></div>
+        <button class="btn btn-primary btn-full" id="resetBtn" onclick="AuthModule.resetPassword()">Update Password</button>
       </div>
     </div>
   </div>
 </div>
 <!-- END AUTH -->
+
 
 
 <!-- ══════════════════════════════════════════════════════════════════
