@@ -31,11 +31,21 @@ window.EventoraSupabase = {
 
         if (url && key && window.supabase) {
             try {
-                this.client = window.supabase.createClient(url, key);
-                // Store connection promise so app.js can await it before first render
+                this.client = window.supabase.createClient(url, key, {
+                    auth: {
+                        // Use PKCE flow — required for SPAs with OAuth
+                        flowType: 'pkce',
+                        // Automatically detect and handle ?code= in URL on page load
+                        detectSessionInUrl: true,
+                        // Persist session in localStorage (safe with anon key only)
+                        persistSession: true,
+                        // Auto-refresh tokens before they expire
+                        autoRefreshToken: true,
+                    }
+                });
+                // Store connection promise (for legacy Supabase DB features)
                 this.connectionPromise = this.testConnection(false).then(result => {
                     if (result && result.success) {
-                        // Auto-load all real data from Supabase into local DB
                         return this.loadAllIntoLocalDB();
                     }
                     return result;

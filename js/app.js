@@ -98,9 +98,10 @@ window.Modal = (() => {
 
 // ── App Router ────────────────────────────────────────────────────────
 window.App = (() => {
-  const views = ['auth', 'home', 'wizard', 'dashboard'];
+  const views = ['loading', 'auth', 'home', 'wizard', 'dashboard'];
   let currentTab = 'overview';
-  let _pendingAction = null; // action to perform after auth
+  let _pendingAction  = null; // action to perform after auth
+  let _routingBusy    = false; // prevent duplicate routing during OAuth flow
 
   const showView = (id) => {
     views.forEach(v => {
@@ -135,8 +136,12 @@ window.App = (() => {
     }
   };
 
-  // Called after successful login/signup
+  // Called after successful login — respects pending action (e.g. Create Event)
+  // Debounced to prevent double-call from getSession() + onAuthStateChange
   const afterAuth = () => {
+    if (_routingBusy) return;
+    _routingBusy = true;
+    setTimeout(() => { _routingBusy = false; }, 1500);
     const action = _pendingAction || 'dashboard';
     _pendingAction = null;
     if (action === 'wizard') goWizard();
