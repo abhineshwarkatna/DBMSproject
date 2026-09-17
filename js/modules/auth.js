@@ -107,6 +107,7 @@ window.AuthModule = (() => {
         updateNavActions();
         updateSidebarUser();
         if (EventoraDB.getAllEvents().length === 0) EventoraDB.seedDemoData();
+        _cleanHash(); // remove #access_token= from URL
         App.afterAuth();
       }
 
@@ -201,6 +202,8 @@ window.AuthModule = (() => {
       updateNavActions();
       updateSidebarUser();
       if (EventoraDB.getAllEvents().length === 0) EventoraDB.seedDemoData();
+      // Clean #access_token= hash from URL so it doesn't interfere with app routing
+      _cleanHash();
       console.log('[Eventora Auth] Session restored ✓ for:', user.email);
       App.afterAuth();
     } else {
@@ -499,8 +502,18 @@ window.AuthModule = (() => {
   };
 
   // ── Helpers ───────────────────────────────────────────────────────────
-  const _cleanUrl = () =>
+  const _cleanUrl  = () =>
     window.history.replaceState({}, document.title, window.location.pathname);
+
+  // Remove the #access_token= hash that implicit flow puts in the URL
+  // Leaving it causes the Supabase client to re-process it on the next getSession()
+  // and also pollutes the browser history / breaks anchor navigation
+  const _cleanHash  = () => {
+    if (window.location.hash && window.location.hash.includes('access_token')) {
+      window.history.replaceState({}, document.title,
+        window.location.pathname + window.location.search);
+    }
+  };
 
   const _showLoginError = (msg) => {
     const el = document.getElementById('loginError');
