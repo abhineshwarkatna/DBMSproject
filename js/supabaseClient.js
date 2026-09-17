@@ -313,6 +313,14 @@ window.EventoraSupabase = {
                 this.fetchUsers()
             ]);
 
+            // Guard: EventoraDB.data is a private variable inside its IIFE
+            // — it is not directly accessible from window.EventoraDB.data
+            // Skip sync if the property doesn't exist (app uses Supabase auth directly)
+            if (!window.EventoraDB?.data) {
+                console.warn('[Supabase] EventoraDB.data not accessible — skipping local sync (using Supabase auth flow)');
+                return false;
+            }
+
             if (events !== null)   window.EventoraDB.data.events   = events;
             if (vendors !== null)  window.EventoraDB.data.vendors  = vendors;
             if (guests !== null)   window.EventoraDB.data.guests   = guests;
@@ -324,6 +332,7 @@ window.EventoraSupabase = {
             window.EventoraDB.save();
             console.log('✓ All data loaded from Supabase PostgreSQL into local DB');
             return true;
+
         } catch (err) {
             console.error('Failed to load all data from Supabase:', err);
             return false;
