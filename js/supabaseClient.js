@@ -33,18 +33,18 @@ window.EventoraSupabase = {
             try {
                 this.client = window.supabase.createClient(url, key, {
                     auth: {
-                        // PKCE flow for SPA OAuth security
-                        flowType: 'pkce',
-                        // We handle ?code= exchange manually in auth.js (exactly once).
-                        // Setting this to true would cause a double-exchange race condition:
-                        //   detectSessionInUrl fires in <head> (async, not yet complete)
-                        //   auth.js init() also calls exchangeCodeForSession on DOMContentLoaded
-                        //   Second exchange fails → error handler → goAuth('login') → loop
-                        detectSessionInUrl: false,
+                        // IMPLICIT flow — returns tokens directly in URL hash (#access_token=...)
+                        // This avoids the PKCE server-side code exchange between Supabase and Google
+                        // that was failing with "Unable to exchange external code".
+                        // Supabase detects #access_token= in URL and auto-creates the session.
+                        flowType: 'implicit',
+                        // Must be true for implicit flow — reads #access_token= from URL hash
+                        detectSessionInUrl: true,
                         persistSession: true,
                         autoRefreshToken: true,
                     }
                 });
+
 
                 // Store connection promise (for legacy Supabase DB features)
                 this.connectionPromise = this.testConnection(false).then(result => {
