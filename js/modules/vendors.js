@@ -1,153 +1,189 @@
 /**
- * EVENTORA - Vendor Registry & Booking Module (Asymmetric Bento Hierarchy)
+ * EVENTORA 3.0 — Vendor Marketplace Module
  */
+window.VendorsModule = (() => {
+  let filterCat = 'All', searchQ = '';
 
-window.VendorsModule = {
-    currentCategory: 'all',
+  const CATS = ['All','Catering','Photography & Media','Decor','Audio/Visual & DJ','Security','Transport','Stage & Production','Photo Booth'];
 
-    vendorImages: {
-        1: 'https://images.unsplash.com/photo-1537633552985-df8429e8048b?w=600&auto=format&fit=crop&q=80',
-        2: 'https://images.unsplash.com/photo-1555244162-803834f70033?w=600&auto=format&fit=crop&q=80',
-        3: 'https://images.unsplash.com/photo-1519167758481-83f550bb49b3?w=600&auto=format&fit=crop&q=80',
-        4: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=600&auto=format&fit=crop&q=80',
-        5: 'https://images.unsplash.com/photo-1557597774-9d273605dfa9?w=600&auto=format&fit=crop&q=80'
-    },
+  const render = (evId) => {
+    const c = document.getElementById('tab-vendors');
+    if (!c) return;
+    const bookings = EventoraDB.getBookings(evId);
+    const catalog  = EventoraDB.getVendorCatalog();
+    const bookedIds = bookings.map(b => b.vendorId);
 
-    render() {
-        const container = document.getElementById('vendorsGrid');
-        if (!container) return;
+    let filtered = catalog.filter(v => {
+      if (filterCat !== 'All' && v.category !== filterCat) return false;
+      if (searchQ && !v.name.toLowerCase().includes(searchQ.toLowerCase()) && !v.category.toLowerCase().includes(searchQ.toLowerCase())) return false;
+      return true;
+    });
 
-        const vendors = window.EventoraDB.getVendors();
-        const filtered = this.currentCategory === 'all'
-            ? vendors
-            : vendors.filter(v => v.service_category.toLowerCase().includes(this.currentCategory.toLowerCase()));
+    const totalCost = bookings.reduce((a, b) => a + (b.cost || 0), 0);
 
-        container.innerHTML = filtered.map((v, index) => {
-            const img = this.vendorImages[v.vendor_id] || this.vendorImages[1];
-            const spanClass = index < 2 ? 'event-standard-card' : 'event-secondary-card';
+    c.innerHTML = `
+      <div class="mod-header">
+        <div>
+          <div class="mod-title">🤝 Vendor Marketplace</div>
+          <div class="mod-subtitle">${bookings.length} booked · ${catalog.length} available · ${EventoraDB.formatCurrency(totalCost)} committed</div>
+        </div>
+        <div class="mod-actions">
+          <div class="search-box">
+            <span class="search-icon">🔍</span>
+            <input class="input input-sm" placeholder="Search vendors..." value="${searchQ}" oninput="VendorsModule.setSearch(this.value,'${evId}')">
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="VendorsModule.addCustomVendor('${evId}')">+ Custom Vendor</button>
+        </div>
+      </div>
 
+      <!-- Booked Vendors -->
+      ${bookings.length > 0 ? `
+      <div class="workspace-section">
+        <div class="workspace-section-title">✅ Your Booked Vendors <span class="badge badge-green">${bookings.length}</span></div>
+        <div class="card" style="padding:0;overflow:hidden">
+          <table class="data-table">
+            <thead><tr><th>Vendor</th><th>Service</th><th>Cost</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody>
+              ${bookings.map(b => `
+                <tr>
+                  <td>
+                    <div style="display:flex;align-items:center;gap:10px">
+                      <div style="width:36px;height:36px;border-radius:var(--r-sm);overflow:hidden;flex-shrink:0">
+                        <img src="${IMGS[catalog.find(v=>v.id===b.vendorId)?.img||'photography']}?w=100&q=70" style="width:100%;height:100%;object-fit:cover" alt="">
+                      </div>
+                      <div>
+                        <div style="font-size:14px;font-weight:700">${b.vendorName}</div>
+                        <div style="font-size:12px;color:var(--text-muted)">${b.vendorId ? '✓ Verified' : 'Custom'}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td><span class="badge badge-gray">${b.service}</span></td>
+                  <td style="font-family:var(--font-mono);font-weight:700;color:var(--brand)">${EventoraDB.formatCurrency(b.cost)}</td>
+                  <td>
+                    <select style="border:1.5px solid var(--border);border-radius:var(--r-sm);padding:4px 8px;font-size:12px;font-weight:600;background:${b.status==='Confirmed'?'var(--success-bg)':'var(--warning-bg)'};color:${b.status==='Confirmed'?'var(--success)':'var(--warning)'}"
+                      onchange="VendorsModule.updateStatus('${evId}','${b.id}',this.value)">
+                      <option ${b.status==='Confirmed'?'selected':''}>Confirmed</option>
+                      <option ${b.status==='Pending'?'selected':''}>Pending</option>
+                      <option ${b.status==='Cancelled'?'selected':''}>Cancelled</option>
+                    </select>
+                  </td>
+                  <td>
+                    <button class="btn btn-ghost btn-xs" onclick="VendorsModule.viewVendor('${evId}','${b.vendorId||''}')" style="margin-right:4px">👁️</button>
+                    <button class="btn btn-ghost btn-xs" style="color:var(--danger)" onclick="VendorsModule.removeBooking('${evId}','${b.id}')">✕</button>
+                  </td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>` : ''}
+
+      <!-- Find Vendors -->
+      <div class="workspace-section">
+        <div class="workspace-section-title">🔍 Find & Book Vendors</div>
+
+        <!-- Category filter -->
+        <div class="filter-bar" style="overflow-x:auto;flex-wrap:nowrap">
+          ${CATS.map(cat => `<div class="filter-chip ${filterCat===cat?'active':''}" style="flex-shrink:0" onclick="VendorsModule.setFilter('${cat}','${evId}')">${cat}</div>`).join('')}
+        </div>
+
+        <!-- Vendor grid -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:20px;margin-top:16px">
+          ${filtered.map(v => {
+            const isBooked = bookedIds.includes(v.id);
             return `
-                <div class="vendor-card tilt-card ${spanClass}" id="vendor-card-${v.vendor_id}" style="padding: 0; overflow: hidden; background: var(--bg-surface); border: 1px solid var(--border-hairline); border-radius: var(--radius-2xl);">
-                    <!-- Media Banner -->
-                    <div style="height: ${index < 2 ? '150px' : '130px'}; background-image: url('${img}'); background-size: cover; background-position: center; position: relative;">
-                        <div style="position: absolute; inset: 0; background: linear-gradient(180deg, rgba(6,8,13,0.1) 0%, rgba(14,19,31,0.95) 100%);"></div>
-                        <div style="position: absolute; top: 14px; left: 16px; right: 16px; display: flex; justify-content: space-between; align-items: center;">
-                            <span class="vendor-category-tag" style="background: rgba(6,8,13,0.7); backdrop-filter: blur(10px); padding: 3px 10px; border-radius: 99px; border: 1px solid rgba(255,255,255,0.12); font-size: 10.5px; font-weight: 700; color: var(--accent-cyan); text-transform: uppercase;">
-                                ${v.service_category}
-                            </span>
-                            <div class="vendor-rating" style="background: rgba(0,0,0,0.5); backdrop-filter: blur(8px); padding: 2px 8px; border-radius: 99px; border: 1px solid rgba(255,255,255,0.1); font-size: 11.5px; font-weight: 700; color: #fbbf24;">⭐ ${v.rating}</div>
-                        </div>
-                    </div>
-
-                    <div style="padding: 22px; flex: 1; display: flex; flex-direction: column; justify-content: space-between;">
-                        <div>
-                            <h3 class="vendor-name" style="font-size: 18px; font-weight: 700; letter-spacing: -0.02em; color: var(--text-high); margin-bottom: 8px;">${v.business_name}</h3>
-                            <div class="vendor-contact-info" style="font-size: 12.5px; color: var(--text-muted); display: flex; flex-direction: column; gap: 4px;">
-                                <span>👤 Contact: <strong style="color: var(--text-body);">${v.contact_name}</strong></span>
-                                <span>📞 ${v.phone}</span>
-                                <span>✉️ ${v.email}</span>
-                            </div>
-
-                            <div style="display: flex; align-items: baseline; gap: 6px; margin: 16px 0;">
-                                <span class="vendor-price-tag" style="font-family: var(--font-heading); font-size: 20px; font-weight: 800; color: #34d399;">₹${v.base_price.toLocaleString('en-IN')}</span>
-                                <span class="vendor-price-sub" style="font-size: 11px; color: var(--text-subtle);">Base Contract</span>
-                            </div>
-                        </div>
-
-                        <div style="display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--border-hairline); padding-top: 14px;">
-                            <span style="font-size: 11px; color: var(--accent-emerald); font-weight: 600;">
-                                ✓ ${v.badge || 'Verified Partner'}
-                            </span>
-                            <button class="btn btn-primary btn-sm" onclick="VendorsModule.openBookingModal(${v.vendor_id})">Book Vendor</button>
-                        </div>
-                    </div>
+            <div class="vendor-marketplace-card">
+              <div class="vendor-card-img img-hover-zoom">
+                <img src="${IMGS[v.img]}?w=500&q=80&auto=format&fit=crop" alt="${v.name}" loading="lazy"
+                     onerror="this.onerror=null;this.src='https://images.unsplash.com/photo-1555244162-803834f70033?w=500&q=80&auto=format&fit=crop'">
+                ${v.verified ? `<div style="position:absolute;top:10px;right:10px;background:var(--success);color:#fff;border-radius:var(--r-full);padding:3px 10px;font-size:10px;font-weight:700">✓ Verified</div>` : ''}
+              </div>
+              <div class="vendor-card-body">
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--brand);margin-bottom:4px">${v.category}</div>
+                <div class="vendor-card-name">${v.name}</div>
+                <div class="vendor-card-cat">${v.contact} · ${v.city}</div>
+                <div style="font-size:13px;color:var(--text-muted);margin:6px 0 10px">${v.desc}</div>
+                <div class="vendor-card-foot">
+                  <div>
+                    <div class="vendor-card-rating">★ ${v.rating}</div>
+                    <div class="vendor-card-price">from ${EventoraDB.formatCurrency(v.price)}${v.priceUnit?'/'+v.priceUnit:''}</div>
+                  </div>
+                  ${isBooked ?
+                    `<span class="badge badge-green">✓ Booked</span>` :
+                    `<div style="display:flex;gap:6px">
+                      <button class="btn btn-secondary btn-xs" onclick="VendorsModule.viewVendor('${evId}','${v.id}')">View</button>
+                      <button class="btn btn-primary btn-xs" onclick="VendorsModule.bookVendor('${evId}','${v.id}')">Book</button>
+                    </div>`}
                 </div>
-            `;
-        }).join('');
+              </div>
+            </div>`;
+          }).join('') || '<div class="empty-state"><div class="empty-icon">🤝</div><div class="empty-title">No vendors found</div></div>'}
+        </div>
+      </div>`;
+  };
 
-        this.renderBookingsList();
-    },
+  const setFilter = (cat, evId) => { filterCat = cat; render(evId); };
+  const setSearch = (q, evId) => { searchQ = q; render(evId); };
+  const updateStatus = (evId, bId, status) => { EventoraDB.updateBooking(evId, bId, { status }); render(evId); };
+  const removeBooking = (evId, bId) => { EventoraDB.deleteBooking(evId, bId); Toast.show('info','Vendor Removed',''); render(evId); };
 
-    renderBookingsList() {
-        const tableBody = document.getElementById('bookingsTableBody');
-        if (!tableBody) return;
-
-        const bookings = window.EventoraDB.getBookings();
-        if (bookings.length === 0) {
-            tableBody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 28px;">No active vendor bookings found.</td></tr>`;
-            return;
-        }
-
-        tableBody.innerHTML = bookings.map(b => `
-            <tr>
-                <td><strong style="font-family: var(--font-mono); color: var(--accent-cyan);">#BK-${b.booking_id}</strong></td>
-                <td><strong>${b.event_title}</strong></td>
-                <td>${b.vendor_name} <br><span style="font-size: 11px; color: var(--text-muted);">${b.vendor_category}</span></td>
-                <td><strong style="font-family: var(--font-mono);">₹${b.agreed_cost.toLocaleString('en-IN')}</strong></td>
-                <td>
-                    <span class="event-status-pill status-${b.booking_status}">${b.booking_status}</span>
-                </td>
-                <td>
-                    <button class="btn btn-secondary btn-sm" onclick="VendorsModule.toggleBookingStatus(${b.booking_id}, '${b.booking_status === 'Confirmed' ? 'Completed' : 'Confirmed'}')">
-                        ${b.booking_status === 'Confirmed' ? 'Mark Completed' : 'Confirm'}
-                    </button>
-                </td>
-            </tr>
-        `).join('');
-    },
-
-    filter(cat) {
-        this.currentCategory = cat;
-        document.querySelectorAll('.vendor-filter-btn').forEach(b => {
-            b.classList.toggle('active', b.dataset.filter === cat);
+  const bookVendor = (evId, vendorId) => {
+    const v = EventoraDB.getVendorCatalog().find(x => x.id === vendorId);
+    if (!v) return;
+    Modal.open(`Book ${v.name}`,
+      `<div style="display:flex;gap:12px;margin-bottom:16px;padding:12px;background:var(--bg-subtle);border-radius:var(--r-md)">
+        <img src="${IMGS[v.img]}?w=80&q=80" style="width:64px;height:64px;object-fit:cover;border-radius:var(--r-sm)" alt="">
+        <div><div style="font-size:15px;font-weight:700">${v.name}</div><div style="font-size:12px;color:var(--text-muted)">${v.category} · ★ ${v.rating}</div>
+          <div style="font-size:13px;color:var(--brand);font-weight:700">from ${EventoraDB.formatCurrency(v.price)}${v.priceUnit?'/'+v.priceUnit:''}</div></div>
+      </div>
+      <div class="form-group"><label class="form-label">Service Description</label><input class="input" id="bkService" value="${v.category}" placeholder="Describe the service"></div>
+      <div class="form-group"><label class="form-label">Agreed Cost (₹)</label><div class="currency-input-wrap"><span class="currency-prefix">₹</span><input class="input" id="bkCost" type="number" value="${v.price}" style="padding-left:32px"></div></div>
+      <div class="form-group"><label class="form-label">Status</label><select class="input" id="bkStatus"><option>Confirmed</option><option>Pending</option></select></div>
+      <div class="form-group"><label class="form-label">Notes</label><textarea class="input" id="bkNotes" rows="2" placeholder="Any special requirements..."></textarea></div>`,
+      () => {
+        EventoraDB.addBooking(evId, {
+          vendorId: v.id, vendorName: v.name,
+          service: document.getElementById('bkService')?.value || v.category,
+          cost: parseInt(document.getElementById('bkCost')?.value) || v.price,
+          status: document.getElementById('bkStatus')?.value || 'Confirmed',
+          notes: document.getElementById('bkNotes')?.value || '',
         });
-        if (window.InteractiveFx) window.InteractiveFx.playSynth('click');
-        this.render();
-    },
+        Toast.show('success','Vendor Booked!', `${v.name} added to your event.`);
+        render(evId);
+      }, 'Confirm Booking');
+  };
 
-    openBookingModal(vendorId) {
-        const vendor = window.EventoraDB.getVendorById(vendorId);
-        if (!vendor) return;
+  const viewVendor = (evId, vendorId) => {
+    const v = EventoraDB.getVendorCatalog().find(x => x.id === vendorId);
+    if (!v) return;
+    Modal.open(v.name, `
+      <img src="${IMGS[v.img]}?w=800&q=80&auto=format&fit=crop" style="width:100%;height:200px;object-fit:cover;border-radius:var(--r-md);margin-bottom:16px" alt="">
+      <div class="badge badge-violet mb-3">${v.category}</div>
+      <div style="font-size:14px;color:var(--text-secondary);margin-bottom:12px">${v.desc}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+        <div style="padding:10px;background:var(--bg-subtle);border-radius:var(--r-sm)"><div style="font-size:11px;color:var(--text-muted)">Contact</div><div style="font-weight:700">${v.contact}</div></div>
+        <div style="padding:10px;background:var(--bg-subtle);border-radius:var(--r-sm)"><div style="font-size:11px;color:var(--text-muted)">Location</div><div style="font-weight:700">${v.city}</div></div>
+        <div style="padding:10px;background:var(--bg-subtle);border-radius:var(--r-sm)"><div style="font-size:11px;color:var(--text-muted)">Rating</div><div style="font-weight:700;color:var(--warning)">★ ${v.rating}</div></div>
+        <div style="padding:10px;background:var(--bg-subtle);border-radius:var(--r-sm)"><div style="font-size:11px;color:var(--text-muted)">Starting Price</div><div style="font-weight:700;color:var(--brand)">${EventoraDB.formatCurrency(v.price)}</div></div>
+      </div>
+      <button class="btn btn-primary btn-full" onclick="Modal.close();VendorsModule.bookVendor('${evId}','${v.id}')">📅 Book This Vendor</button>`);
+  };
 
-        const events = window.EventoraDB.getEvents();
-        const eventSelect = document.getElementById('bookingEventSelect');
-        if (eventSelect) {
-            eventSelect.innerHTML = events.map(e => `
-                <option value="${e.event_id}">${e.title} (${e.event_type})</option>
-            `).join('');
-        }
+  const addCustomVendor = (evId) => {
+    Modal.open('Add Custom Vendor',
+      `<div class="form-group"><label class="form-label">Vendor Name *</label><input class="input" id="cvName" placeholder="e.g., XYZ Decorators"></div>
+       <div class="form-group"><label class="form-label">Contact Person</label><input class="input" id="cvContact" placeholder="Contact name & phone"></div>
+       <div class="form-group"><label class="form-label">Category *</label><select class="input" id="cvCat"><option>Catering</option><option>Photography & Media</option><option>Decor</option><option>Audio/Visual & DJ</option><option>Transport</option><option>Security</option><option>Other</option></select></div>
+       <div class="form-group"><label class="form-label">Cost (₹)</label><input class="input" id="cvCost" type="number" placeholder="0"></div>`,
+      () => {
+        const name = document.getElementById('cvName')?.value?.trim();
+        if (!name) { Toast.show('warning','Name required',''); return; }
+        EventoraDB.addBooking(evId, {
+          vendorName: name, service: document.getElementById('cvCat')?.value || 'Other',
+          cost: parseInt(document.getElementById('cvCost')?.value)||0, status:'Pending',
+        });
+        Toast.show('success','Vendor Added', name); render(evId);
+      }, 'Add Vendor');
+  };
 
-        document.getElementById('bookingVendorId').value = vendor.vendor_id;
-        document.getElementById('bookingVendorName').innerText = vendor.business_name;
-        document.getElementById('bookingAgreedCost').value = vendor.base_price;
-
-        App.openModal('modalBookVendor');
-        if (window.InteractiveFx) window.InteractiveFx.playSynth('mode');
-    },
-
-    handleBookingSubmit(e) {
-        e.preventDefault();
-        const form = e.target;
-        const newBooking = {
-            event_id: form.event_id.value,
-            vendor_id: form.vendor_id.value,
-            agreed_cost: form.agreed_cost.value,
-            booking_status: 'Confirmed',
-            service_notes: form.service_notes.value
-        };
-
-        window.EventoraDB.addBooking(newBooking);
-        App.closeModal('modalBookVendor');
-        form.reset();
-        App.refreshAllModules();
-        App.showToast('Vendor booked and linked to event expenses!', 'success');
-        if (window.InteractiveFx) window.InteractiveFx.playSynth('sql');
-    },
-
-    toggleBookingStatus(bookingId, newStatus) {
-        window.EventoraDB.updateBookingStatus(bookingId, newStatus);
-        App.refreshAllModules();
-        App.showToast(`Booking #BK-${bookingId} updated to ${newStatus}`, 'info');
-        if (window.InteractiveFx) window.InteractiveFx.playSynth('click');
-    }
-};
+  return { render, setFilter, setSearch, updateStatus, removeBooking, bookVendor, viewVendor, addCustomVendor };
+})();

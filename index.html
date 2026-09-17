@@ -1,1147 +1,668 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EVENTORA - Plan Smart. Celebrate Smarter. | Centralized DBMS System</title>
-    <meta name="description" content="EVENTORA: Plan Smart. Celebrate Smarter. Real-World Relational DBMS Event Management System with 3D Motion Graphics.">
-    
-    <!-- Google Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@300;400;450;500;600;700;800&display=swap" rel="stylesheet">
-    
-    <!-- Three.js CDN for 3D Motion & Stage Simulator -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EVENTORA — Plan Your Event</title>
+  <meta name="description" content="Plan, manage, and run any event — from a birthday at home to a large conference.">
+  <meta name="theme-color" content="#7C3AED">
+  <link rel="icon" type="image/png" href="assets/logo.png">
+  <link rel="apple-touch-icon" href="assets/logo.png">
 
-    <!-- CSS Stylesheets -->
-    <link rel="stylesheet" href="styles/main.css">
-    <link rel="stylesheet" href="styles/components.css">
-    <link rel="stylesheet" href="styles/theme-3d.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles/main.css">
+  <link rel="stylesheet" href="styles/animations.css">
+  <link rel="stylesheet" href="styles/components.css">
 </head>
 <body>
 
-<!-- Three.js Ambient Particle Constellation Canvas -->
-<canvas id="bgCanvas"></canvas>
+<div class="app-root">
 
-<div class="app-container">
-    <!-- SIDEBAR NAVIGATION -->
-    <aside class="sidebar">
-        <div class="brand-section">
-            <div class="brand-logo-icon">✨</div>
-            <div class="brand-info">
-                <h1>EVENTORA</h1>
-                <p>Plan Smart. Celebrate Smarter.</p>
-            </div>
-            <button class="sidebar-collapse-btn" id="btnSidebarCollapse" onclick="App.toggleSidebar()" title="Hide Sidebar (Ctrl+B)" aria-label="Hide Sidebar">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="m15 18-6-6 6-6"/>
-                </svg>
-            </button>
+<!-- ══════════════════════════════════════════════════════════════════
+     VIEW: AUTH (Login / Sign Up)
+══════════════════════════════════════════════════════════════════════ -->
+<div id="view-auth" class="view">
+  <div class="auth-layout">
+
+    <!-- Left Panel — Visual -->
+    <div class="auth-visual" id="authVisual">
+      <img id="authVisualImg"
+           src="https://images.unsplash.com/photo-1519225421-2c890c5c2d59?w=900&q=85&auto=format&fit=crop"
+           alt="Event" loading="eager"
+           onerror="this.src='https://images.unsplash.com/photo-1530103862676-de8c9debad1d?w=900&q=85&auto=format&fit=crop'">
+      <div class="auth-visual-overlay"></div>
+      <div class="auth-visual-content">
+        <img src="assets/logo.png" alt="Eventora" style="height:60px;width:auto;margin-bottom:20px;filter:brightness(0) invert(1);object-fit:contain">
+        <div style="font-family:var(--font-head);font-size:32px;font-weight:900;color:#fff;line-height:1.15;margin-bottom:10px">Plan your<br>perfect event.</div>
+        <div style="font-size:15px;color:rgba(255,255,255,0.75)">Guests · Budget · Vendors · Schedule</div>
+      </div>
+    </div>
+
+    <!-- Right Panel — Forms -->
+    <div class="auth-form-panel">
+      <!-- Login Form -->
+      <div class="auth-form" id="authLogin">
+        <div class="auth-form-logo" onclick="App.goHome()">
+          <img src="assets/logo.png" alt="Eventora" style="height:36px;width:auto;object-fit:contain">
+        </div>
+        <h1 class="auth-title">Welcome back</h1>
+        <p class="auth-subtitle">Sign in to your account</p>
+
+        <div class="form-group">
+          <label class="form-label" for="loginEmail">Email</label>
+          <input class="input" id="loginEmail" type="email" placeholder="you@example.com" autocomplete="email">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="loginPassword">
+            Password
+            <span class="form-label-link" onclick="AuthModule.showForgot()">Forgot password?</span>
+          </label>
+          <div style="position:relative">
+            <input class="input" id="loginPassword" type="password" placeholder="Enter your password" autocomplete="current-password">
+            <button class="pwd-toggle" onclick="AuthModule.togglePwd('loginPassword',this)" tabindex="-1">👁</button>
+          </div>
         </div>
 
-        <nav class="nav-menu">
-            <div class="nav-section-title">Core Modules</div>
-            <a class="nav-item active" data-tab="overview">
-                <span class="nav-icon">📊</span>
-                <span>01. Overview & 3D</span>
-            </a>
-            <a class="nav-item" data-tab="events">
-                <span class="nav-icon">📅</span>
-                <span>02. Event Planning</span>
-                <span class="nav-badge" id="navEventsBadge">4</span>
-            </a>
-            <a class="nav-item" data-tab="vendors">
-                <span class="nav-icon">🤝</span>
-                <span>03. Vendor Market</span>
-            </a>
-            <a class="nav-item" data-tab="guests">
-                <span class="nav-icon">👥</span>
-                <span>04. Guest & RSVP</span>
-            </a>
-            <a class="nav-item" data-tab="budget">
-                <span class="nav-icon">💰</span>
-                <span>05. Budget & Expense</span>
-            </a>
-            <a class="nav-item" data-tab="payments">
-                <span class="nav-icon">💳</span>
-                <span>06. Payments & Invoices</span>
-            </a>
+        <button class="btn btn-primary btn-full btn-lg" id="loginBtn" onclick="AuthModule.login()">Sign In</button>
 
-            <div class="nav-section-title">DBMS Engineering</div>
-            <a class="nav-item" data-tab="dbms-studio">
-                <span class="nav-icon">⚡</span>
-                <span>07. DBMS Studio</span>
-                <span class="nav-badge" style="background: rgba(6, 182, 212, 0.15); color: var(--accent-cyan);">Live SQL</span>
-            </a>
-            <a class="nav-item" data-tab="admin">
-                <span class="nav-icon">🛡️</span>
-                <span>08. Admin & Integrity</span>
-            </a>
-        </nav>
+        <div class="auth-divider"><span>or</span></div>
 
-        <div class="sidebar-footer">
-            <div class="team-card">
-                <div class="team-card-header">
-                    <span>🎓 DBMS Term Project</span>
-                </div>
-                <div class="team-lead">Abhineshwar <span style="font-family: var(--font-mono); font-size: 11px; color: var(--accent-cyan);">2510030306</span></div>
-                <div class="team-sub">Sai Charan • Dheeraj • Sai Nath • Abhilash</div>
-            </div>
+        <button class="btn btn-social btn-full" onclick="AuthModule.googleLogin()">
+          <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+          Continue with Google
+        </button>
+        <button class="btn btn-social btn-full mt-2" onclick="AuthModule.phoneLogin()">
+          📱 Continue with Phone
+        </button>
+
+        <div class="auth-switch">
+          Don't have an account?
+          <span class="auth-switch-link" onclick="AuthModule.showSignup()">Create account</span>
         </div>
+      </div>
+
+      <!-- Sign Up Form -->
+      <div class="auth-form" id="authSignup" style="display:none">
+        <div class="auth-form-logo" onclick="App.goHome()">
+          <img src="assets/logo.png" alt="Eventora" style="height:36px;width:auto;object-fit:contain">
+        </div>
+        <h1 class="auth-title">Create account</h1>
+        <p class="auth-subtitle">Free forever. No credit card needed.</p>
+
+        <div class="form-group">
+          <label class="form-label" for="signupName">Full Name</label>
+          <input class="input" id="signupName" type="text" placeholder="Your name" autocomplete="name">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="signupEmail">Email</label>
+          <input class="input" id="signupEmail" type="email" placeholder="you@example.com" autocomplete="email">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="signupPassword">Password</label>
+          <div style="position:relative">
+            <input class="input" id="signupPassword" type="password" placeholder="Min. 6 characters" autocomplete="new-password">
+            <button class="pwd-toggle" onclick="AuthModule.togglePwd('signupPassword',this)" tabindex="-1">👁</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="signupConfirm">Confirm Password</label>
+          <input class="input" id="signupConfirm" type="password" placeholder="Re-enter password" autocomplete="new-password">
+        </div>
+
+        <button class="btn btn-primary btn-full btn-lg" onclick="AuthModule.signup()">Create Account</button>
+
+        <div class="auth-divider"><span>or</span></div>
+
+        <button class="btn btn-social btn-full" onclick="AuthModule.googleLogin()">
+          <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+          Continue with Google
+        </button>
+
+        <div class="auth-switch">
+          Already have an account?
+          <span class="auth-switch-link" onclick="AuthModule.showLogin()">Sign in</span>
+        </div>
+      </div>
+
+      <!-- Phone OTP Form -->
+      <div class="auth-form" id="authPhone" style="display:none">
+        <button class="auth-back-btn" onclick="AuthModule.showLogin()">← Back</button>
+        <h1 class="auth-title">Phone Sign In</h1>
+        <p class="auth-subtitle">We'll send a one-time code</p>
+        <div class="form-group" id="phoneStep1">
+          <label class="form-label">Phone Number</label>
+          <div style="display:flex;gap:8px">
+            <select class="input" style="width:90px;flex-shrink:0">
+              <option>+91</option><option>+1</option><option>+44</option><option>+65</option>
+            </select>
+            <input class="input" id="phoneNumber" type="tel" placeholder="10-digit number" style="flex:1">
+          </div>
+          <button class="btn btn-primary btn-full mt-3" onclick="AuthModule.sendOtp()">Send OTP</button>
+        </div>
+        <div class="form-group" id="phoneStep2" style="display:none">
+          <label class="form-label">Enter OTP sent to your phone</label>
+          <input class="input" id="otpInput" type="text" placeholder="6-digit code" maxlength="6" style="letter-spacing:0.2em;text-align:center;font-size:22px;font-family:var(--font-mono)">
+          <button class="btn btn-primary btn-full mt-3" onclick="AuthModule.verifyOtp()">Verify & Sign In</button>
+          <div style="text-align:center;margin-top:12px;font-size:13px;color:var(--text-muted)">
+            Didn't get the code? <span style="color:var(--brand);cursor:pointer;font-weight:600" onclick="AuthModule.sendOtp()">Resend</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Forgot Password -->
+      <div class="auth-form" id="authForgot" style="display:none">
+        <button class="auth-back-btn" onclick="AuthModule.showLogin()">← Back</button>
+        <h1 class="auth-title">Reset password</h1>
+        <p class="auth-subtitle">We'll send a reset link to your email</p>
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input class="input" id="forgotEmail" type="email" placeholder="you@example.com">
+        </div>
+        <button class="btn btn-primary btn-full" onclick="AuthModule.sendReset()">Send Reset Link</button>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- END AUTH -->
+
+
+<!-- ══════════════════════════════════════════════════════════════════
+     VIEW: HOME (Landing + Discovery)
+══════════════════════════════════════════════════════════════════════ -->
+<div id="view-home" class="view">
+
+  <!-- Top Navigation -->
+  <nav class="top-nav" id="homeNav">
+    <div class="nav-inner">
+      <a class="nav-logo" href="#" onclick="App.goHome();return false" style="padding:0">
+        <img src="assets/logo.png" alt="Eventora" style="height:38px;width:auto;object-fit:contain;display:block">
+      </a>
+      <div class="nav-search" id="homeSearchBox" onclick="this.classList.add('focused')">
+        <span class="nav-search-icon">🔍</span>
+        <input id="homeSearchInput" placeholder="Search events, venues, vendors..." autocomplete="off">
+      </div>
+      <div class="nav-links-area">
+        <div class="nav-link-btn" onclick="App.scrollTo('categories-section')">Categories</div>
+        <div class="nav-link-btn" onclick="App.scrollTo('discovery-section')">Explore</div>
+        <div class="nav-link-btn" onclick="App.scrollTo('vendors-section')">Vendors</div>
+      </div>
+      <div class="nav-actions" id="navActions">
+        <!-- Populated by AuthModule -->
+      </div>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <section class="home-hero">
+    <div class="home-hero-img">
+      <img src="https://images.unsplash.com/photo-1519225421-2c890c5c2d59?w=1800&q=85&auto=format&fit=crop"
+           alt="Beautiful event celebration" loading="eager"
+           onerror="this.src='https://images.unsplash.com/photo-1530103862676-de8c9debad1d?w=1800&q=85&auto=format&fit=crop'">
+    </div>
+    <div class="home-hero-overlay"></div>
+    <div class="container" style="position:relative;z-index:2">
+      <div class="home-hero-content anim-fade-up">
+        <h1 class="hero-brand-title">EVENTORA</h1>
+        <div class="hero-cta-group">
+          <button class="btn btn-hero-primary btn-lg" onclick="App.goWizard()">Create an Event</button>
+          <button class="btn btn-hero-secondary btn-lg" onclick="App.scrollTo('discovery-section')">Explore Events</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CATEGORY BROWSING -->
+  <section class="categories-section" id="categories-section">
+    <div class="container">
+      <div class="section-hd">
+        <h2 class="section-title">What are you planning?</h2>
+        <p class="section-subtitle">Choose your event type and we'll set up the right tools.</p>
+      </div>
+    </div>
+    <div class="categories-scroll-wrap">
+      <div class="categories-row stagger" id="categoriesRow"></div>
+    </div>
+  </section>
+
+  <!-- DISCOVERY: Popular Events -->
+  <section class="events-discovery-section" id="discovery-section" style="background:var(--bg-base)">
+    <div class="container">
+      <div class="section-row-nav">
+        <div class="section-row-nav-title">🔥 Popular Events</div>
+        <span class="section-row-nav-link">View all →</span>
+      </div>
+      <div class="events-scroll stagger" id="popularEventsRow"></div>
+    </div>
+  </section>
+
+  <!-- DISCOVERY: Upcoming -->
+  <section class="events-discovery-section" style="background:var(--bg-white)">
+    <div class="container">
+      <div class="section-row-nav">
+        <div class="section-row-nav-title">📅 Upcoming</div>
+        <span class="section-row-nav-link" onclick="App.goWizard()">Plan yours →</span>
+      </div>
+      <div class="events-scroll stagger" id="upcomingEventsRow"></div>
+    </div>
+  </section>
+
+  <!-- DISCOVERY: For Students -->
+  <section class="events-discovery-section" style="background:var(--bg-base)">
+    <div class="container">
+      <div class="section-row-nav">
+        <div class="section-row-nav-title">🎓 Student & College Events</div>
+        <span class="section-row-nav-link">See more →</span>
+      </div>
+      <div class="events-scroll stagger" id="studentEventsRow"></div>
+    </div>
+  </section>
+
+  <!-- VENDOR SPOTLIGHT -->
+  <section class="events-discovery-section" id="vendors-section" style="background:var(--bg-white)">
+    <div class="container">
+      <div class="section-row-nav">
+        <div class="section-row-nav-title">🤝 Service Providers</div>
+        <span class="section-row-nav-link">Browse all →</span>
+      </div>
+      <div class="events-scroll stagger" id="vendorSpotlightRow"></div>
+    </div>
+  </section>
+
+  <!-- HOW IT WORKS -->
+  <section class="section-spacer" style="background:var(--bg-base)">
+    <div class="container">
+      <div class="section-hd center reveal">
+        <h2 class="section-title">How it works</h2>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px;margin-top:32px" class="stagger">
+        <div class="card" style="text-align:center;padding:28px 20px">
+          <div style="width:48px;height:48px;border-radius:var(--r-lg);background:var(--brand-light);display:flex;align-items:center;justify-content:center;font-size:24px;margin:0 auto 16px">✨</div>
+          <div style="font-family:var(--font-head);font-size:16px;font-weight:800;margin-bottom:6px">Create</div>
+          <div style="font-size:13px;color:var(--text-muted);line-height:1.5">Pick your event type and venue. Done in 2 minutes.</div>
+        </div>
+        <div class="card" style="text-align:center;padding:28px 20px">
+          <div style="width:48px;height:48px;border-radius:var(--r-lg);background:var(--success-bg);display:flex;align-items:center;justify-content:center;font-size:24px;margin:0 auto 16px">📋</div>
+          <div style="font-family:var(--font-head);font-size:16px;font-weight:800;margin-bottom:6px">Plan</div>
+          <div style="font-size:13px;color:var(--text-muted);line-height:1.5">Manage guests, vendors, budget, and schedule.</div>
+        </div>
+        <div class="card" style="text-align:center;padding:28px 20px">
+          <div style="width:48px;height:48px;border-radius:var(--r-lg);background:var(--warning-bg);display:flex;align-items:center;justify-content:center;font-size:24px;margin:0 auto 16px">🎉</div>
+          <div style="font-family:var(--font-head);font-size:16px;font-weight:800;margin-bottom:6px">Celebrate</div>
+          <div style="font-size:13px;color:var(--text-muted);line-height:1.5">Run your event live and collect memories.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA BANNER -->
+  <section style="background:var(--brand);padding:64px 0">
+    <div class="container" style="text-align:center">
+      <h2 class="reveal" style="font-family:var(--font-head);font-size:clamp(24px,4vw,40px);font-weight:900;color:#fff;margin-bottom:12px">Your next event starts here.</h2>
+      <button class="btn btn-hero-primary btn-xl reveal mt-4" onclick="App.goWizard()" style="padding:14px 36px;font-size:15px">Create My Event</button>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer style="background:var(--text-primary);padding:32px 0">
+    <div class="container" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <img src="assets/logo.png" alt="Eventora" style="height:36px;width:auto;object-fit:contain;filter:brightness(0) invert(1)">
+      </div>
+      <div style="font-size:12px;color:rgba(255,255,255,0.4)">© 2026 EVENTORA</div>
+    </div>
+  </footer>
+</div>
+<!-- END HOME -->
+
+
+<!-- ══════════════════════════════════════════════════════════════════
+     VIEW: WIZARD (Create Event)
+══════════════════════════════════════════════════════════════════════ -->
+<div id="view-wizard" class="view wizard-view">
+
+  <!-- Wizard Nav -->
+  <nav class="wizard-nav">
+    <button class="wizard-back-btn" onclick="App.goHome()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 12H5M5 12l7 7M5 12l7-7"/></svg>
+    </button>
+    <div class="wizard-steps">
+      <div class="wz-step active" data-step="1"><div class="wz-dot">1</div><span class="wz-step-label">Type</span></div>
+      <div class="wz-connector"></div>
+      <div class="wz-step" data-step="2"><div class="wz-dot">2</div><span class="wz-step-label">Venue</span></div>
+      <div class="wz-connector"></div>
+      <div class="wz-step" data-step="3"><div class="wz-dot">3</div><span class="wz-step-label">Details</span></div>
+      <div class="wz-connector"></div>
+      <div class="wz-step" data-step="4"><div class="wz-dot">4</div><span class="wz-step-label">Budget</span></div>
+      <div class="wz-connector"></div>
+      <div class="wz-step" data-step="5"><div class="wz-dot">5</div><span class="wz-step-label">Features</span></div>
+      <div class="wz-connector"></div>
+      <div class="wz-step" data-step="6"><div class="wz-dot">6</div><span class="wz-step-label">Review</span></div>
+    </div>
+    <button class="btn btn-ghost btn-sm" onclick="App.goHome()">✕</button>
+  </nav>
+  <div class="wizard-progress-bar"><div class="wizard-progress-fill" id="wizardProgressFill"></div></div>
+
+  <!-- Wizard Body -->
+  <div class="wizard-body">
+
+    <!-- STEP 1: Event Type -->
+    <div class="wizard-panel" id="wz-step-1">
+      <div class="wizard-section-title">What are you planning?</div>
+      <div class="wizard-section-sub">Choose a category to get started.</div>
+      <div class="wz-cat-grid" id="wz1CatGrid"></div>
+      <div id="wz1SubcatArea" style="margin-top:20px"></div>
+    </div>
+
+    <!-- STEP 2: Venue -->
+    <div class="wizard-panel" id="wz-step-2">
+      <div class="wizard-section-title">Where is it happening?</div>
+      <div class="wizard-section-sub">Choose your venue type.</div>
+      <!-- My Own Place — hero option -->
+      <div class="wz-own-place" id="wz2OwnPlace" onclick="WizardModule.selectVenue('home')">
+        <div class="wz-own-place-icon">🏠</div>
+        <div>
+          <div class="wz-own-place-title">My Own Place</div>
+          <div class="wz-own-place-desc">Home, office, college, farmhouse — anywhere you own or manage.</div>
+        </div>
+        <div style="margin-left:auto;font-size:13px;font-weight:700;color:var(--brand)">Choose →</div>
+      </div>
+      <div style="font-size:13px;font-weight:600;color:var(--text-muted);margin-bottom:16px">Or pick a venue type</div>
+      <div class="wz-venue-grid" id="wz2VenueGrid"></div>
+      <div id="wz2VenueDetail" style="margin-top:20px"></div>
+    </div>
+
+    <!-- STEP 3: Details -->
+    <div class="wizard-panel" id="wz-step-3">
+      <div class="wizard-section-title">Event details</div>
+      <div class="form-group">
+        <label class="form-label">Event Name *</label>
+        <input class="input input-lg" id="wz3-title" placeholder="e.g., Priya & Rahul's Wedding">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Date *</label>
+          <input class="input" id="wz3-date" type="date">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Time</label>
+          <input class="input" id="wz3-time" type="time" value="18:00">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Guests: <strong id="wz3GuestDisplay" style="color:var(--brand)">100</strong></label>
+        <input class="range-input" id="wz3-guests" type="range" min="5" max="5000" step="5" value="100"
+               oninput="document.getElementById('wz3GuestDisplay').textContent=this.value">
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-subtle);margin-top:4px">
+          <span>5</span><span>500</span><span>1000</span><span>2000</span><span>5000+</span>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Format</label>
+          <select class="input" id="wz3-format">
+            <option value="Physical">In-Person</option>
+            <option value="Online">Online</option>
+            <option value="Hybrid">Hybrid</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Duration</label>
+          <select class="input" id="wz3-duration">
+            <option value="2">2 hours</option>
+            <option value="4" selected>4 hours</option>
+            <option value="6">6 hours</option>
+            <option value="8">Full day</option>
+            <option value="24">Multi-day</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Description <span style="color:var(--text-subtle);font-weight:400">(optional)</span></label>
+        <textarea class="input" id="wz3-desc" rows="2" placeholder="Briefly describe your event..."></textarea>
+      </div>
+    </div>
+
+    <!-- STEP 4: Budget -->
+    <div class="wizard-panel" id="wz-step-4">
+      <div class="wizard-section-title">What's your budget?</div>
+      <div class="form-group">
+        <label class="form-label">Total Budget (₹)</label>
+        <div class="currency-input-wrap">
+          <span class="currency-prefix">₹</span>
+          <input class="input input-lg" id="wz4-budget" type="number" min="0" placeholder="e.g., 500000"
+                 style="font-size:24px;font-weight:700;height:64px" oninput="WizardModule.updateBudgetBreakdown()">
+        </div>
+        <div class="form-help">Quick presets:</div>
+        <div class="budget-presets" id="wz4Presets"></div>
+      </div>
+      <div id="wz4Breakdown"></div>
+    </div>
+
+    <!-- STEP 5: Modules -->
+    <div class="wizard-panel" id="wz-step-5">
+      <div class="wizard-section-title">What do you need?</div>
+      <div class="wizard-section-sub">Choose which tools to include. You can change this anytime.</div>
+      <div class="modules-list" id="wz5ModulesList"></div>
+    </div>
+
+    <!-- STEP 6: Review -->
+    <div class="wizard-panel" id="wz-step-6">
+      <!-- Rendered by WizardModule.renderStep6() -->
+    </div>
+
+  </div><!-- /wizard-body -->
+
+  <div class="wizard-footer">
+    <button class="btn btn-secondary" id="wizPrev" onclick="WizardModule.prev()" style="display:none">← Back</button>
+    <div style="font-size:13px;color:var(--text-muted)" id="wizStepLabel">Step 1 of 6</div>
+    <div style="display:flex;gap:10px">
+      <button class="btn btn-primary" id="wizNext" onclick="WizardModule.next()">Continue →</button>
+      <button class="btn btn-primary" id="wizCreate" onclick="WizardModule.createEvent()" style="display:none">🎉 Create Event</button>
+    </div>
+  </div>
+</div>
+<!-- END WIZARD -->
+
+
+<!-- ══════════════════════════════════════════════════════════════════
+     VIEW: DASHBOARD (Event Workspace)
+══════════════════════════════════════════════════════════════════════ -->
+<div id="view-dashboard" class="view">
+  <div class="dash-view">
+
+    <!-- Sidebar overlay (mobile) -->
+    <div id="sidebarOverlay" onclick="App.closeSidebar()"
+         style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:199"></div>
+
+    <!-- Sidebar -->
+    <aside class="dash-sidebar" id="dashSidebar">
+      <div class="sidebar-top">
+        <img src="assets/logo.png" alt="Eventora" onclick="App.goHome()" style="height:32px;width:auto;object-fit:contain;cursor:pointer;flex-shrink:0">
+        <button class="btn btn-ghost btn-xs ml-auto" onclick="App.goHome()" title="Home" style="font-size:16px">🏠</button>
+      </div>
+
+      <!-- Active Event Card -->
+      <div class="sidebar-event-card hover-lift-sm" onclick="App.openEventSwitcher()" id="sidebarEventCard">
+        <div class="sec-img">
+          <img id="sidebarEventImg"
+               src="https://images.unsplash.com/photo-1519225421-2c890c5c2d59?w=400&q=80&auto=format&fit=crop"
+               alt="Event"
+               onerror="this.src='https://images.unsplash.com/photo-1530103862676-de8c9debad1d?w=400&q=80&auto=format&fit=crop'">
+        </div>
+        <div class="sec-body">
+          <div class="sec-event-name" id="sidebarEventName">Loading...</div>
+          <div class="sec-event-date" id="sidebarEventDate">—</div>
+          <span class="sec-switch">Switch Event</span>
+        </div>
+      </div>
+
+      <!-- Nav -->
+      <nav class="sidebar-nav">
+        <div class="nav-group-label">Planning</div>
+        <div class="nav-item active" data-tab="overview">
+          <span class="nav-icon">📊</span><span class="nav-label">Overview</span>
+        </div>
+        <div class="nav-item" data-tab="guests">
+          <span class="nav-icon">👥</span><span class="nav-label">Guests</span>
+          <span class="nav-badge" id="navGuestBadge">0</span>
+        </div>
+        <div class="nav-item" data-tab="budget">
+          <span class="nav-icon">💰</span><span class="nav-label">Budget</span>
+        </div>
+        <div class="nav-item" data-tab="vendors">
+          <span class="nav-icon">🤝</span><span class="nav-label">Vendors</span>
+        </div>
+        <div class="nav-item" data-tab="tasks">
+          <span class="nav-icon">✅</span><span class="nav-label">Tasks</span>
+          <span class="nav-badge red" id="navTaskBadge">0</span>
+        </div>
+
+        <div class="nav-group-label">Experience</div>
+        <div class="nav-item" data-tab="venue">
+          <span class="nav-icon">🏠</span><span class="nav-label">Venue</span>
+        </div>
+        <div class="nav-item" data-tab="schedule">
+          <span class="nav-icon">📅</span><span class="nav-label">Schedule</span>
+        </div>
+        <div class="nav-item" data-tab="catering">
+          <span class="nav-icon">🍽️</span><span class="nav-label">Catering</span>
+        </div>
+        <div class="nav-item" data-tab="transport">
+          <span class="nav-icon">🚌</span><span class="nav-label">Transport</span>
+        </div>
+        <div class="nav-item" data-tab="accommodation">
+          <span class="nav-icon">🏨</span><span class="nav-label">Accommodation</span>
+        </div>
+
+        <div class="nav-group-label">Communication</div>
+        <div class="nav-item" data-tab="invitations">
+          <span class="nav-icon">✉️</span><span class="nav-label">Invitations</span>
+        </div>
+        <div class="nav-item" data-tab="media">
+          <span class="nav-icon">📷</span><span class="nav-label">Media</span>
+        </div>
+
+        <div class="nav-group-label">Event Day</div>
+        <div class="nav-item" data-tab="live">
+          <span class="nav-icon">🔴</span><span class="nav-label">Live Control</span>
+          <span class="nav-badge red">LIVE</span>
+        </div>
+        <div class="nav-item" data-tab="analytics">
+          <span class="nav-icon">📈</span><span class="nav-label">Analytics</span>
+        </div>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="sidebar-user-row" id="sidebarUserRow">
+          <!-- Populated by AuthModule -->
+        </div>
+      </div>
     </aside>
 
-    <!-- MAIN CONTENT WRAPPER -->
-    <div class="main-wrapper">
-        <!-- TOP HEADER -->
-        <header class="top-header">
-            <div class="header-left">
-                <button class="sidebar-toggle-btn" id="btnSidebarToggle" onclick="App.toggleSidebar()" title="Toggle Sidebar (Ctrl+B)" aria-label="Toggle Navigation Sidebar">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <rect width="18" height="18" x="3" y="3" rx="2"/>
-                        <path d="M9 3v18"/>
-                        <path d="m14 9-3 3 3 3"/>
-                    </svg>
-                </button>
-                <div class="header-title-container">
-                    <h2 id="headerModuleTitle">Executive Overview</h2>
-                    <p id="headerModuleSub">Integrated Event Planning & DBMS Architecture</p>
-                </div>
-            </div>
+    <!-- Main -->
+    <div class="dash-main" id="dashMain">
 
-            <div class="header-actions">
-                <!-- Command Palette Trigger (Linear / Raycast Style) -->
-                <div class="cmd-k-trigger" onclick="InteractiveFx.openCommandPalette()" title="Press Ctrl+K or ⌘K">
-                    <span>Search anything...</span>
-                    <span class="cmd-key-badge">Ctrl K</span>
-                </div>
+      <!-- Top Bar -->
+      <div class="dash-topbar">
+        <div class="dash-topbar-left">
+          <button class="sidebar-toggle-btn" onclick="App.toggleSidebar()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+            </svg>
+          </button>
+          <div>
+            <div class="topbar-page-title" id="topbarTitle">Overview</div>
+            <div class="topbar-page-sub" id="topbarSub">Your event workspace</div>
+          </div>
+        </div>
+        <div class="dash-topbar-right">
+          <span id="dashEventStatus" class="badge badge-amber">⏳ Planning</span>
+          <button class="btn btn-secondary btn-sm" onclick="App.requireAuth('wizard')">+ New Event</button>
+          <button class="btn btn-primary btn-sm" onclick="App.switchTab('live')">🔴 Go Live</button>
+        </div>
+      </div>
 
-                <!-- Web Audio Sound Toggle -->
-                <button class="sound-toggle-btn active" id="btnSoundToggle" onclick="InteractiveFx.toggleSound()" title="Toggle Interface Audio">
-                    🔊
-                </button>
+      <!-- Content -->
+      <div class="dash-content">
+        <div class="tab-view active" id="tab-overview"></div>
+        <div class="tab-view" id="tab-guests"></div>
+        <div class="tab-view" id="tab-budget"></div>
+        <div class="tab-view" id="tab-vendors"></div>
+        <div class="tab-view" id="tab-tasks"></div>
+        <div class="tab-view" id="tab-venue"></div>
+        <div class="tab-view" id="tab-schedule"></div>
+        <div class="tab-view" id="tab-catering"></div>
+        <div class="tab-view" id="tab-transport"></div>
+        <div class="tab-view" id="tab-accommodation"></div>
+        <div class="tab-view" id="tab-invitations"></div>
+        <div class="tab-view" id="tab-media"></div>
+        <div class="tab-view" id="tab-live"></div>
+        <div class="tab-view" id="tab-analytics"></div>
+      </div><!-- /dash-content -->
 
-                <!-- Supabase Cloud Connection Status Pill -->
-                <button class="supabase-status-btn" id="supabaseStatusPill" onclick="App.openModal('modalSupabaseConfig')" title="Supabase Cloud Database Settings">
-                    <span class="status-dot" id="supabaseStatusDot"></span>
-                    <span class="supabase-badge-icon">⚡</span>
-                    <span id="supabaseStatusText">Connect Supabase</span>
-                </button>
+    </div><!-- /dash-main -->
+  </div><!-- /dash-view -->
 
-                <button class="btn btn-secondary btn-sm" onclick="DbmsStudioModule.exportSQLFile()">
-                    📥 MySQL .sql
-                </button>
-                <button class="btn btn-primary btn-sm" onclick="App.openModal('modalCreateEvent')">
-                    + New Event
-                </button>
-            </div>
-        </header>
-
-        <!-- VIEWPORT VIEWS -->
-        <main class="content-view">
-
-            <!-- ========================================================= -->
-            <!-- VIEW 1: MASTER BENTO GRID (Linear / Stripe / Vercel Standard) -->
-            <!-- ========================================================= -->
-            <section class="module-view active" id="view-overview">
-                <div class="bento-grid">
-                    
-                    <!-- BENTO TILE 1: Grand Editorial Hero Introduction (12 Columns) -->
-                    <div class="bento-tile bento-span-12 bento-hero-tile tilt-card">
-                        <div>
-                            <!-- Kicker & Live Status Row -->
-                            <div class="bento-hero-badge-container">
-                                <div class="bento-hero-badge">
-                                    <span class="hero-live-dot"></span>
-                                    <span class="hero-badge-title">Enterprise DBMS Architecture v2.4</span>
-                                    <span class="hero-badge-sep">•</span>
-                                    <span class="hero-badge-green">● 100% 3NF Normalized</span>
-                                    <span class="hero-badge-sep">•</span>
-                                    <span class="hero-badge-blue">InnoDB ACID Compliant</span>
-                                </div>
-                                <div class="hero-sys-status">
-                                    <span class="pulse-ring"></span>
-                                    <span>● System Active (Local Engine)</span>
-                                </div>
-                            </div>
-                            
-                            <!-- Massive High-Impact Headline -->
-                            <h1 class="bento-hero-title">
-                                Plan Smart.<br><span class="hero-gradient-text">Celebrate Smarter.</span>
-                            </h1>
-                            
-                            <!-- Large Editorial Lead Paragraph -->
-                            <p class="bento-hero-desc">
-                                EVENTORA is a centralized, production-grade event planning and management platform engineered on mathematical relational integrity. 
-                                By replacing fragmented spreadsheets with an ACID-compliant database, it eliminates scheduling conflicts, guarantees zero redundant tuples, 
-                                enforces foreign-key referential integrity across vendor contracts, and powers an interactive 3D WebGL stage visualizer in real time.
-                            </p>
-
-                            <!-- Cool Live Interactive Feature Pillars -->
-                            <div class="hero-feature-cards">
-                                <div class="hero-feat-card" onclick="App.switchTab('events')" title="View Events Module">
-                                    <div class="hero-feat-top">
-                                        <span class="hero-feat-icon">🎪</span>
-                                        <span class="hero-feat-arrow">→</span>
-                                    </div>
-                                    <div class="hero-feat-title">Asymmetric Event Suite</div>
-                                    <div class="hero-feat-desc">Multi-tier stages, real-time RSVP telemetry, & 3D venue layout visualizer.</div>
-                                </div>
-
-                                <div class="hero-feat-card" onclick="App.switchTab('vendors')" title="View Vendor Marketplace">
-                                    <div class="hero-feat-top">
-                                        <span class="hero-feat-icon">🤝</span>
-                                        <span class="hero-feat-arrow">→</span>
-                                    </div>
-                                    <div class="hero-feat-title">Vendor & Service Hub</div>
-                                    <div class="hero-feat-desc">Foreign-key integrity across catering, sound, lighting & venue booking junction tables.</div>
-                                </div>
-
-                                <div class="hero-feat-card" onclick="App.switchTab('budget')" title="View Financial Ledger">
-                                    <div class="hero-feat-top">
-                                        <span class="hero-feat-icon">💳</span>
-                                        <span class="hero-feat-arrow">→</span>
-                                    </div>
-                                    <div class="hero-feat-title">ACID Financial Ledger</div>
-                                    <div class="hero-feat-desc">₹38,00,000 capital tracked with double-entry balance and automated cascade rollups.</div>
-                                </div>
-
-                                <div class="hero-feat-card" onclick="App.switchTab('dbms-studio')" title="Launch Live SQL Studio">
-                                    <div class="hero-feat-top">
-                                        <span class="hero-feat-icon">⚡</span>
-                                        <span class="hero-feat-arrow">→</span>
-                                    </div>
-                                    <div class="hero-feat-title">Live SQL Studio</div>
-                                    <div class="hero-feat-desc">In-browser relational SQL interpreter with instant MySQL DDL/DML schema export.</div>
-                                </div>
-                            </div>
-
-                            <!-- Big Prominent Hero Action Buttons -->
-                            <div class="bento-hero-actions">
-                                <button class="btn-hero-primary" onclick="App.switchTab('events')">
-                                    Explore Events Directory <span class="btn-arrow-icon">→</span>
-                                </button>
-                                <button class="btn-hero-secondary" onclick="App.switchTab('dbms-studio')">
-                                    ⚡ Launch Live SQL Studio
-                                </button>
-                                <button class="btn-hero-secondary" onclick="Eventora3D.setLightingMood('gala'); window.scrollTo({top: 750, behavior: 'smooth'});">
-                                    🎪 Test 3D Stage Simulator
-                                </button>
-                                <button class="btn-hero-secondary" onclick="App.openModal('modalCreateEvent')">
-                                    + Schedule New Event
-                                </button>
-                                <button class="btn-hero-secondary cmd-hero-btn" onclick="InteractiveFx.openCommandPalette()" title="Press Ctrl+K">
-                                    <span>🔍 Search Anything</span>
-                                    <kbd class="hero-kbd">Ctrl K</kbd>
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- Academic Engineering Team Credentials -->
-                        <div class="bento-hero-team">
-                            <div class="team-cred-header">
-                                <span class="team-cred-icon">🎓</span>
-                                <span class="team-cred-label">DBMS Term Project Engineering Team • Dept. of Computer Science & Engineering:</span>
-                            </div>
-                            <div class="team-tags-container">
-                                <span class="bento-team-tag lead" title="Lead Architect">👑 Abhineshwar K <span class="roll-badge">2510030306</span></span>
-                                <span class="bento-team-tag">Sai Charan V <span class="roll-badge">2510030205</span></span>
-                                <span class="bento-team-tag">Dheeraj R <span class="roll-badge">2510030165</span></span>
-                                <span class="bento-team-tag">Sai Nath M <span class="roll-badge">2510030198</span></span>
-                                <span class="bento-team-tag">Abhilash Goud P <span class="roll-badge">2510030298</span></span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- BENTO TILE 2: Interactive 3D Stage Visualizer Viewport (8 Columns) -->
-                    <div class="bento-tile bento-span-8 bento-stage-tile tilt-card">
-                        <div class="stage-overlay-header">
-                            <div class="stage-overlay-title">
-                                <span>🎪 Interactive 3D Event Stage Visualizer</span>
-                                <span style="color: var(--accent-cyan); font-size: 10.5px; font-family: var(--font-mono);">Three.js WebGL</span>
-                            </div>
-                            <div style="font-size: 11.5px; color: var(--text-muted); background: rgba(255,255,255,0.9); padding: 5px 12px; border-radius: 99px; backdrop-filter: blur(10px); box-shadow: 0 1px 4px rgba(0,0,0,0.08);">
-                                Drag to rotate • Dynamic spotlights
-                            </div>
-                        </div>
-
-                        <div class="venue-viewport-container">
-                            <canvas id="venue3dCanvas"></canvas>
-
-                            <!-- Floating HUD -->
-                            <div class="venue-hud-controls">
-                                <div class="venue-mood-chips">
-                                    <span style="font-size: 10.5px; font-weight: 700; color: #475569; text-transform: uppercase;">Lighting:</span>
-                                    <button class="mood-chip active" data-mood="cyber" onclick="Eventora3D.setLightingMood('cyber')">🔮 Cyber</button>
-                                    <button class="mood-chip" data-mood="gala" onclick="Eventora3D.setLightingMood('gala')">✨ Gala</button>
-                                    <button class="mood-chip" data-mood="sunset" onclick="Eventora3D.setLightingMood('sunset')">🌅 Sunset</button>
-                                    <button class="mood-chip" data-mood="emerald" onclick="Eventora3D.setLightingMood('emerald')">🌲 Emerald</button>
-                                </div>
-
-                                <div class="venue-view-actions">
-                                    <button class="hud-btn" id="btnToggleRotation" onclick="Eventora3D.toggleRotation()">⏸ Pause Orbit</button>
-                                    <button class="hud-btn" onclick="Eventora3D.resetVenueCamera()">🎯 Center</button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- BENTO TILE 3: Live Financial Velocity & Budget Dial (4 Columns) -->
-                    <div class="bento-tile bento-span-4 bento-metric-tile tilt-card">
-                        <div>
-                            <div class="metric-header-row">
-                                <span class="metric-tag-label">Capital Allocated</span>
-                                <span class="metric-stat-pill">✓ 4 Events Active</span>
-                            </div>
-                            <div class="metric-big-num" id="statTotalBudget">₹38,00,000</div>
-                            <div class="metric-sub-label">Aggregated across active events</div>
-                        </div>
-
-                        <div style="margin: 20px 0;">
-                            <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 8px;">
-                                <span style="color: var(--text-muted);">Budget Capitalized</span>
-                                <strong style="color: var(--accent-primary);" id="bentoSpentRatio">₹20.4L (54%)</strong>
-                            </div>
-                            <div style="height: 7px; background: #f1f5f9; border-radius: 99px; overflow: hidden;">
-                                <div style="width: 54%; height: 100%; background: linear-gradient(90deg, var(--accent-primary), var(--accent-cyan)); border-radius: 99px;"></div>
-                            </div>
-                        </div>
-
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding-top: 16px; border-top: 1px solid var(--border-hairline);">
-                            <div>
-                                <div class="metric-tag-label" style="font-size: 10px;">Attendees</div>
-                                <div style="font-size: 18px; font-weight: 800; color: var(--text-high); font-family: var(--font-heading);" id="statTotalGuests">--</div>
-                            </div>
-                            <div>
-                                <div class="metric-tag-label" style="font-size: 10px;">Vendors</div>
-                                <div style="font-size: 18px; font-weight: 800; color: var(--text-high); font-family: var(--font-heading);" id="statTotalVendors">5 Verified</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- BENTO TILE 4: Relational Architecture & ACID Compliance (6 Columns) -->
-                    <div class="bento-tile bento-span-6 tilt-card">
-                        <div>
-                            <div class="metric-header-row">
-                                <span class="metric-tag-label">Relational Integrity</span>
-                                <span class="metric-stat-pill" style="color: var(--accent-primary); border-color: #c7d2fe; background: #eef2ff;">MySQL 3NF Verified</span>
-                            </div>
-                            <h3 style="font-family: var(--font-heading); font-size: 19px; font-weight: 700; color: var(--text-high); margin-bottom: 6px;">
-                                Relational Constraints & ACID Storage
-                            </h3>
-                            <p style="font-size: 13px; color: var(--text-muted); line-height: 1.5; margin-bottom: 16px;">
-                                Strict referential integrity guards cascading deletes and foreign keys across 7 normalized entities.
-                            </p>
-
-                            <ul style="list-style: none; display: flex; flex-direction: column; gap: 8px; font-size: 12px; font-family: var(--font-mono); color: var(--text-body);">
-                                <li style="display: flex; align-items: center; gap: 6px;">
-                                    <span style="color: #059669;">✓</span> <span>events → users (ON DELETE RESTRICT, UPDATE CASCADE)</span>
-                                </li>
-                                <li style="display: flex; align-items: center; gap: 6px;">
-                                    <span style="color: #059669;">✓</span> <span>bookings → events & vendors (ON DELETE CASCADE)</span>
-                                </li>
-                                <li style="display: flex; align-items: center; gap: 6px;">
-                                    <span style="color: #059669;">✓</span> <span>expenses & payments → events (ON DELETE CASCADE)</span>
-                                </li>
-                                <li style="display: flex; align-items: center; gap: 6px;">
-                                    <span style="color: #059669;">✓</span> <span>Zero Orphaned Foreign Keys (100% Normalized)</span>
-                                </li>
-                            </ul>
-                        </div>
-
-                        <div style="margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border-hairline); display: flex; gap: 8px;">
-                            <button class="btn btn-secondary btn-sm" style="width: 100%;" onclick="App.switchTab('admin')">Inspect System Integrity Audit →</button>
-                        </div>
-                    </div>
-
-                    <!-- BENTO TILE 5: Interactive Live SQL Playground (6 Columns) -->
-                    <div class="bento-tile bento-span-6 tilt-card">
-                        <div>
-                            <div class="metric-header-row">
-                                <span class="metric-tag-label">Query Engine</span>
-                                <span class="metric-stat-pill" style="color: #059669; border-color: #a7f3d0; background: #ecfdf5;">Sub-millisecond</span>
-                            </div>
-                            <h3 style="font-family: var(--font-heading); font-size: 19px; font-weight: 700; color: var(--text-high); margin-bottom: 6px;">
-                                Interactive Live SQL Console
-                            </h3>
-                            <p style="font-size: 13px; color: var(--text-muted); line-height: 1.5; margin-bottom: 16px;">
-                                Execute analytical multi-table JOINs, conditional aggregations, and subqueries directly in the browser.
-                            </p>
-
-                            <div style="display: flex; flex-direction: column; gap: 8px;">
-                                <button class="btn btn-secondary btn-sm" style="justify-content: space-between;" onclick="App.switchTab('dbms-studio'); DbmsStudioModule.loadPreset('budgetVariance');">
-                                    <span>Query 1: Budget Variance (JOIN, SUM)</span>
-                                    <span style="font-family: var(--font-mono); color: var(--accent-primary);">Run ⚡</span>
-                                </button>
-                                <button class="btn btn-secondary btn-sm" style="justify-content: space-between;" onclick="App.switchTab('dbms-studio'); DbmsStudioModule.loadPreset('confirmedBookings');">
-                                    <span>Query 2: Confirmed Bookings (3-Table JOIN)</span>
-                                    <span style="font-family: var(--font-mono); color: var(--accent-primary);">Run ⚡</span>
-                                </button>
-                                <button class="btn btn-secondary btn-sm" style="justify-content: space-between;" onclick="App.switchTab('dbms-studio'); DbmsStudioModule.loadPreset('rsvpStats');">
-                                    <span>Query 3: RSVP Attendance Stats</span>
-                                    <span style="font-family: var(--font-mono); color: var(--accent-primary);">Run ⚡</span>
-                                </button>
-                            </div>
-                        </div>
-
-                        <div style="margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border-hairline); display: flex; gap: 8px;">
-                            <button class="btn btn-primary btn-sm" style="width: 100%;" onclick="App.switchTab('dbms-studio');">Launch Full Terminal Studio →</button>
-                        </div>
-                    </div>
-
-                </div>
-            </section>
-
-            <!-- ========================================================= -->
-            <!-- VIEW 2: EVENT PLANNING & SCHEDULING (Editorial Luma Style) -->
-            <!-- ========================================================= -->
-            <section class="module-view" id="view-events">
-                <div class="section-header" style="margin-bottom: 28px;">
-                    <div>
-                        <h2 class="section-title" style="font-size: 24px; letter-spacing: -0.025em;">Event Showcase & Operations</h2>
-                        <p style="font-size: 13px; color: var(--text-muted);">Manage timelines, venues, budgets, and attendee capacities with high-contrast event aesthetics.</p>
-                    </div>
-                    <div class="section-actions">
-                        <button class="btn btn-secondary btn-sm event-filter-btn active" data-filter="all" onclick="EventsModule.filter('all')">All</button>
-                        <button class="btn btn-secondary btn-sm event-filter-btn" data-filter="wedding" onclick="EventsModule.filter('wedding')">Weddings</button>
-                        <button class="btn btn-secondary btn-sm event-filter-btn" data-filter="tech conference" onclick="EventsModule.filter('tech conference')">Conferences</button>
-                        <button class="btn btn-secondary btn-sm event-filter-btn" data-filter="birthday gala" onclick="EventsModule.filter('birthday gala')">Birthdays</button>
-                        <button class="btn btn-secondary btn-sm event-filter-btn" data-filter="corporate summit" onclick="EventsModule.filter('corporate summit')">Corporate</button>
-                        <button class="btn btn-primary btn-sm" onclick="App.openModal('modalCreateEvent')">+ New Event</button>
-                    </div>
-                </div>
-
-                <div class="editorial-events-grid" id="eventsGrid">
-                    <!-- Injected by EventsModule.render() -->
-                </div>
-            </section>
-
-            <!-- ========================================================= -->
-            <!-- VIEW 3: VENDOR MARKETPLACE & BOOKINGS -->
-            <!-- ========================================================= -->
-            <section class="module-view" id="view-vendors">
-                <div class="section-header" style="margin-bottom: 28px;">
-                    <div>
-                        <h2 class="section-title" style="font-size: 24px; letter-spacing: -0.025em;">Verified Vendor Directory & Contracts</h2>
-                        <p style="font-size: 13px; color: var(--text-muted);">Connect with verified caterers, photographers, venues, and audio engineers.</p>
-                    </div>
-                    <div class="section-actions">
-                        <button class="btn btn-secondary btn-sm vendor-filter-btn active" data-filter="all" onclick="VendorsModule.filter('all')">All Services</button>
-                        <button class="btn btn-secondary btn-sm vendor-filter-btn" data-filter="catering" onclick="VendorsModule.filter('catering')">Catering</button>
-                        <button class="btn btn-secondary btn-sm vendor-filter-btn" data-filter="photo" onclick="VendorsModule.filter('photo')">Photography</button>
-                        <button class="btn btn-secondary btn-sm vendor-filter-btn" data-filter="decor" onclick="VendorsModule.filter('decor')">Venue & Decor</button>
-                        <button class="btn btn-secondary btn-sm vendor-filter-btn" data-filter="audio" onclick="VendorsModule.filter('audio')">Audio/DJ</button>
-                    </div>
-                </div>
-
-                <div class="editorial-events-grid" id="vendorsGrid" style="margin-bottom: 40px;">
-                    <!-- Injected by VendorsModule.render() -->
-                </div>
-
-                <!-- Active Relational Bookings Table -->
-                <div class="section-header" style="margin-top: 20px; margin-bottom: 16px;">
-                    <h3 class="section-title" style="font-size: 17px;">📋 Active Vendor Bookings (Relational Junction Table)</h3>
-                </div>
-                <div class="data-table-container">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Booking ID</th>
-                                <th>Event Title</th>
-                                <th>Vendor Service</th>
-                                <th>Agreed Contract</th>
-                                <th>Status</th>
-                                <th>Action</th>
-                            </tr>
-                        </thead>
-                        <tbody id="bookingsTableBody">
-                            <!-- Injected by VendorsModule.renderBookingsList() -->
-                        </tbody>
-                    </table>
-                </div>
-            </section>
-
-            <!-- ========================================================= -->
-            <!-- VIEW 4: GUEST MANAGEMENT & RSVP -->
-            <!-- ========================================================= -->
-            <section class="module-view" id="view-guests">
-                <div class="section-header" style="margin-bottom: 24px;">
-                    <div>
-                        <h2 class="section-title" style="font-size: 24px; letter-spacing: -0.025em;">Guest Registry & Attendance Tracking</h2>
-                        <p style="font-size: 13px; color: var(--text-muted);">Manage invitations, dietary preferences, and real-time attendance confirmations.</p>
-                    </div>
-                    <div class="section-actions">
-                        <select class="form-control" style="width: auto;" id="guestEventFilterSelect" onchange="GuestsModule.filterByEvent(this.value)">
-                            <option value="all">All Events</option>
-                        </select>
-                        <input type="text" class="form-control" style="width: 220px;" placeholder="Search guest name or email..." oninput="GuestsModule.handleSearch(this.value)">
-                        <button class="btn btn-primary btn-sm" onclick="App.openModal('modalAddGuest')">+ Add Guest</button>
-                    </div>
-                </div>
-
-                <div id="guestStatsSummary" style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
-                    <!-- Injected by GuestsModule -->
-                </div>
-
-                <div class="data-table-container">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Guest ID</th>
-                                <th>Guest Details</th>
-                                <th>Target Event</th>
-                                <th>RSVP Status (Interactive)</th>
-                                <th>Dietary</th>
-                                <th>+1s</th>
-                                <th>Action</th>
-                            </tr>
-                        </thead>
-                        <tbody id="guestsTableBody">
-                            <!-- Injected by GuestsModule.render() -->
-                        </tbody>
-                    </table>
-                </div>
-            </section>
-
-            <!-- ========================================================= -->
-            <!-- VIEW 5: BUDGET & EXPENSE TRACKER -->
-            <!-- ========================================================= -->
-            <section class="module-view" id="view-budget">
-                <div class="section-header" style="margin-bottom: 24px;">
-                    <div>
-                        <h2 class="section-title" style="font-size: 24px; letter-spacing: -0.025em;">Budget Ledger & Expense Tracking</h2>
-                        <p style="font-size: 13px; color: var(--text-muted);">Prevent budget overruns with itemized expense recording and real-time variance calculations.</p>
-                    </div>
-                    <div class="section-actions">
-                        <select class="form-control" style="width: auto;" id="budgetEventFilterSelect" onchange="BudgetModule.filterByEvent(this.value)">
-                            <option value="all">All Events Combined</option>
-                        </select>
-                        <button class="btn btn-primary btn-sm" onclick="App.openModal('modalAddExpense')">+ Log Expense</button>
-                    </div>
-                </div>
-
-                <div class="bento-grid" style="margin-bottom: 24px;">
-                    <div class="bento-tile bento-span-4 tilt-card">
-                        <div class="metric-tag-label">Allocated Budget</div>
-                        <div class="metric-big-num" id="budgetTotalAllocated">₹0</div>
-                        <div class="metric-sub-label">From active event definitions</div>
-                    </div>
-                    <div class="bento-tile bento-span-4 tilt-card">
-                        <div class="metric-tag-label">Total Actual Spent</div>
-                        <div class="metric-big-num" id="budgetTotalSpent" style="color: var(--accent-cyan);">₹0</div>
-                        <div class="metric-sub-label">Aggregated itemized expenses</div>
-                    </div>
-                    <div class="bento-tile bento-span-4 tilt-card">
-                        <div class="metric-tag-label">Remaining Balance</div>
-                        <div class="metric-big-num" id="budgetTotalRemaining" style="color: var(--accent-emerald);">₹0</div>
-                        <div class="metric-sub-label">Real-time variance metric</div>
-                    </div>
-                </div>
-
-                <div class="bento-tile tilt-card" style="margin-bottom: 28px; padding: 20px 24px;">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px;">
-                        <span style="color: var(--text-muted);">Overall Budget Consumption</span>
-                        <strong id="budgetPctLabel" style="color: var(--accent-cyan);">0% Used</strong>
-                    </div>
-                    <div style="height: 8px; background: rgba(255,255,255,0.06); border-radius: 99px; overflow: hidden;">
-                        <div class="budget-progress-fill" id="budgetUtilizationBar" style="width: 0%; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--accent-cyan), var(--accent-primary-light));"></div>
-                    </div>
-                </div>
-
-                <div class="section-header" style="margin-bottom: 16px;">
-                    <h3 class="section-title" style="font-size: 17px;">Itemized Expense Ledger</h3>
-                </div>
-                <div class="data-table-container">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Expense ID</th>
-                                <th>Item / Service</th>
-                                <th>Category</th>
-                                <th>Estimated Cost</th>
-                                <th>Actual Cost</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody id="expensesTableBody">
-                            <!-- Injected by BudgetModule.render() -->
-                        </tbody>
-                    </table>
-                </div>
-            </section>
-
-            <!-- ========================================================= -->
-            <!-- VIEW 6: PAYMENTS & INVOICES -->
-            <!-- ========================================================= -->
-            <section class="module-view" id="view-payments">
-                <div class="section-header" style="margin-bottom: 24px;">
-                    <div>
-                        <h2 class="section-title" style="font-size: 24px; letter-spacing: -0.025em;">Payments & Financial Audit Trail</h2>
-                        <p style="font-size: 13px; color: var(--text-muted);">Verified financial settlements, payment methods, and downloadable invoices.</p>
-                    </div>
-                    <div class="section-actions">
-                        <button class="btn btn-primary btn-sm" onclick="App.openModal('modalRecordPayment')">+ Record Payment</button>
-                    </div>
-                </div>
-
-                <div class="data-table-container">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Payment ID</th>
-                                <th>Transaction Ref</th>
-                                <th>Target Event</th>
-                                <th>Recipient / Vendor</th>
-                                <th>Amount Paid</th>
-                                <th>Method</th>
-                                <th>Receipt</th>
-                            </tr>
-                        </thead>
-                        <tbody id="paymentsTableBody">
-                            <!-- Injected by PaymentsModule.render() -->
-                        </tbody>
-                    </table>
-                </div>
-            </section>
-
-            <!-- ========================================================= -->
-            <!-- VIEW 7: INTERACTIVE DBMS RELATIONAL STUDIO (Developer Grade) -->
-            <!-- ========================================================= -->
-            <section class="module-view" id="view-dbms-studio">
-                <div class="section-header" style="margin-bottom: 24px;">
-                    <div>
-                        <h2 class="section-title" style="font-size: 24px; letter-spacing: -0.025em;">⚡ Interactive DBMS Relational Studio</h2>
-                        <p style="font-size: 13px; color: var(--text-muted);">
-                            Live SQL query execution against normalized tables, interactive ER entity inspector, and 3NF architecture.
-                        </p>
-                    </div>
-                    <div class="section-actions">
-                        <button class="btn btn-emerald btn-sm" onclick="DbmsStudioModule.exportSQLFile()">📥 Download eventora_schema.sql</button>
-                    </div>
-                </div>
-
-                <!-- LIVE SQL TERMINAL -->
-                <div class="sql-terminal-card" style="margin-bottom: 32px;">
-                    <div class="terminal-header">
-                        <div class="terminal-dots">
-                            <span class="terminal-dot dot-red"></span>
-                            <span class="terminal-dot dot-yellow"></span>
-                            <span class="terminal-dot dot-green"></span>
-                        </div>
-                        <span class="terminal-title">mysql -u abhineshwar -p eventora_db --console</span>
-                        <span style="font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);">Shortcut: Ctrl + Enter</span>
-                    </div>
-
-                    <div class="query-presets-bar">
-                        <span class="query-presets-label">Preset Queries:</span>
-                        <button class="preset-chip" onclick="DbmsStudioModule.loadPreset('budgetVariance')">Query 1: Budget Variance (JOIN, SUM)</button>
-                        <button class="preset-chip" onclick="DbmsStudioModule.loadPreset('confirmedBookings')">Query 2: Confirmed Bookings (3-Table JOIN)</button>
-                        <button class="preset-chip" onclick="DbmsStudioModule.loadPreset('rsvpStats')">Query 3: RSVP Attendance Stats</button>
-                        <button class="preset-chip" onclick="DbmsStudioModule.loadPreset('selectEvents')">events</button>
-                        <button class="preset-chip" onclick="DbmsStudioModule.loadPreset('selectVendors')">vendors</button>
-                        <button class="preset-chip" onclick="DbmsStudioModule.loadPreset('selectBookings')">bookings</button>
-                        <button class="preset-chip" onclick="DbmsStudioModule.loadPreset('selectGuests')">guests</button>
-                        <button class="preset-chip" onclick="DbmsStudioModule.loadPreset('selectPayments')">payments</button>
-                    </div>
-
-                    <div class="sql-editor-container">
-                        <textarea class="sql-textarea" id="sqlEditor" spellcheck="false" placeholder="Enter SQL query here (e.g. SELECT * FROM events;)"></textarea>
-                    </div>
-
-                    <div class="sql-actions-bar">
-                        <span class="sql-exec-meta" id="sqlExecMeta">Ready to execute query</span>
-                        <button class="btn btn-primary btn-sm" onclick="DbmsStudioModule.runQuery()">▶ Run SQL Query</button>
-                    </div>
-                </div>
-
-                <!-- Query Results Grid -->
-                <div class="sql-results-panel" style="margin-bottom: 36px;">
-                    <div class="results-header">
-                        <span style="font-weight: 600; font-family: var(--font-mono);">Query Result Table</span>
-                        <span>Formatted Relation View</span>
-                    </div>
-                    <div style="overflow-x: auto;">
-                        <table class="data-table" style="font-family: var(--font-mono); font-size: 12.5px;">
-                            <thead id="sqlResultsThead">
-                                <!-- Injected columns -->
-                            </thead>
-                            <tbody id="sqlResultsTbody">
-                                <!-- Injected rows -->
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <!-- RELATIONAL ER DIAGRAM & SCHEMA EXPLORER -->
-                <div class="section-header" style="margin-bottom: 16px;">
-                    <div>
-                        <h3 class="section-title" style="font-size: 19px;">🗺️ Relational Schema & Entity-Relationship Model</h3>
-                        <p style="font-size: 13px; color: var(--text-muted);">7 Normalized relational entities with primary keys (PK 🔑) and foreign key constraints (FK 🔗).</p>
-                    </div>
-                </div>
-
-                <div class="er-diagram-container" style="margin-bottom: 36px;">
-                    <div class="er-entities-grid" id="erEntitiesGrid">
-                        <!-- Injected by DbmsStudioModule.renderERDiagram() -->
-                    </div>
-                </div>
-
-                <!-- NORMALIZATION SHOWCASE (1NF, 2NF, 3NF) -->
-                <div class="section-header" style="margin-bottom: 16px;">
-                    <div>
-                        <h3 class="section-title" style="font-size: 19px;">📐 Database Normalization Architecture</h3>
-                        <p style="font-size: 13px; color: var(--text-muted);">Demonstrating how Eventora satisfies 1NF, 2NF, and 3NF to eliminate redundancy.</p>
-                    </div>
-                </div>
-
-                <div class="normalization-grid">
-                    <div class="norm-card tilt-card">
-                        <h4>1️⃣ First Normal Form (1NF)</h4>
-                        <p>All attributes are atomic. No multi-valued repeating groups (e.g., guest lists or multiple vendor phones are separated into child tables).</p>
-                        <div class="norm-code-box">
-                            guests table: Each row holds single guest record with atomic phone & email fields.
-                        </div>
-                    </div>
-
-                    <div class="norm-card tilt-card">
-                        <h4>2️⃣ Second Normal Form (2NF)</h4>
-                        <p>No partial dependencies. Composite relationships between Events and Vendors are abstracted through the <code>bookings</code> junction table.</p>
-                        <div class="norm-code-box">
-                            bookings: booking_id (PK), event_id (FK), vendor_id (FK), agreed_cost.
-                        </div>
-                    </div>
-
-                    <div class="norm-card tilt-card">
-                        <h4>3️⃣ Third Normal Form (3NF)</h4>
-                        <p>No transitive dependencies (X → Y → Z). Non-key attributes like organizer phone or vendor ratings are not stored inside the <code>events</code> table.</p>
-                        <div class="norm-code-box">
-                            events table only holds organizer_id (FK), referencing users independently.
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- ========================================================= -->
-            <!-- VIEW 8: ADMIN CONTROL & INTEGRITY -->
-            <!-- ========================================================= -->
-            <section class="module-view" id="view-admin">
-                <div class="section-header" style="margin-bottom: 24px;">
-                    <div>
-                        <h2 class="section-title" style="font-size: 24px; letter-spacing: -0.025em;">System Health & Relational Integrity Monitor</h2>
-                        <p style="font-size: 13px; color: var(--text-muted);">Audit constraints, cascading rules, and database maintenance tools.</p>
-                    </div>
-                    <div class="section-actions">
-                        <button class="btn btn-secondary btn-sm" style="color: var(--accent-rose);" onclick="App.resetDatabase()">🔄 Reset DB to Presentation Seed</button>
-                    </div>
-                </div>
-
-                <div class="bento-grid">
-                    <div class="bento-tile bento-span-4 tilt-card">
-                        <div class="metric-tag-label">Referential Integrity</div>
-                        <div class="metric-big-num" style="color: var(--accent-emerald);">100% OK</div>
-                        <div class="metric-sub-label">Zero orphaned foreign keys</div>
-                    </div>
-                    <div class="bento-tile bento-span-4 tilt-card">
-                        <div class="metric-tag-label">Storage Engine</div>
-                        <div class="metric-big-num" style="font-size: 22px;">InnoDB</div>
-                        <div class="metric-sub-label">ACID Compliant Transactions (UTF8MB4)</div>
-                    </div>
-                    <div class="bento-tile bento-span-4 tilt-card">
-                        <div class="metric-tag-label">Active Database</div>
-                        <div class="metric-big-num" style="font-size: 22px;">eventora_db</div>
-                        <div class="metric-sub-label">7 Relational 3NF Tables</div>
-                    </div>
-                </div>
-
-                <div class="bento-tile tilt-card" style="margin-top: 24px; padding: 28px;">
-                    <h3 class="section-title" style="font-size: 17px; margin-bottom: 14px;">Active Database Constraints Verified</h3>
-                    <ul style="list-style: none; display: flex; flex-direction: column; gap: 10px; font-size: 13px; font-family: var(--font-mono); color: var(--text-muted);">
-                        <li>✓ <code>events.organizer_id</code> → <code>users.user_id</code> (ON DELETE RESTRICT, ON UPDATE CASCADE)</li>
-                        <li>✓ <code>bookings.event_id</code> → <code>events.event_id</code> (ON DELETE CASCADE)</li>
-                        <li>✓ <code>bookings.vendor_id</code> → <code>vendors.vendor_id</code> (ON DELETE RESTRICT)</li>
-                        <li>✓ <code>guests.event_id</code> → <code>events.event_id</code> (ON DELETE CASCADE)</li>
-                        <li>✓ <code>expenses.event_id</code> → <code>events.event_id</code> (ON DELETE CASCADE)</li>
-                        <li>✓ <code>payments.event_id</code> → <code>events.event_id</code> (ON DELETE CASCADE)</li>
-                    </ul>
-                </div>
-            </section>
-        </main>
+  <!-- Mobile Bottom Nav -->
+  <div class="mobile-bottom-nav">
+    <div class="mobile-nav-row">
+      <div class="mobile-nav-btn" onclick="App.goHome()">
+        <span class="mobile-nav-icon">🏠</span><span class="mobile-nav-label">Home</span>
+      </div>
+      <div class="mobile-nav-btn active" onclick="App.switchTab('overview')">
+        <span class="mobile-nav-icon">📊</span><span class="mobile-nav-label">Overview</span>
+      </div>
+      <div class="mobile-nav-btn" onclick="App.switchTab('guests')">
+        <span class="mobile-nav-icon">👥</span><span class="mobile-nav-label">Guests</span>
+      </div>
+      <div class="mobile-nav-btn" onclick="App.switchTab('tasks')">
+        <span class="mobile-nav-icon">✅</span><span class="mobile-nav-label">Tasks</span>
+      </div>
+      <div class="mobile-nav-btn" onclick="App.switchTab('live')">
+        <span class="mobile-nav-icon">🔴</span><span class="mobile-nav-label">Live</span>
+      </div>
     </div>
+  </div>
 </div>
+<!-- END DASHBOARD -->
 
-<!-- ===================================================================== -->
-<!-- LINEAR / RAYCAST STYLE COMMAND PALETTE DIALOG (Ctrl+K / ⌘K) -->
-<!-- ===================================================================== -->
-<div class="cmd-palette-overlay" id="commandPaletteModal">
-    <div class="cmd-palette-box">
-        <div class="cmd-input-bar">
-            <span style="font-size: 16px; color: var(--accent-cyan);">⚡</span>
-            <input type="text" class="cmd-search-input" id="cmdSearchInput" placeholder="Type a command, search event, vendor or SQL query..." autocomplete="off">
-            <span class="cmd-key-badge">ESC</span>
-        </div>
-        <ul class="cmd-results-list" id="cmdResultsList">
-            <!-- Injected by InteractiveFx.renderCommandList() -->
-        </ul>
-        <div class="cmd-palette-footer">
-            <span>Navigation: <kbd class="cmd-key-badge">↑</kbd> <kbd class="cmd-key-badge">↓</kbd></span>
-            <span>Execute: <kbd class="cmd-key-badge">ENTER ↵</kbd></span>
-        </div>
+</div><!-- /app-root -->
+
+<!-- Global Modal -->
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal" id="modalContent">
+    <div class="modal-header">
+      <div class="modal-title" id="modalTitle">Dialog</div>
+      <button class="modal-close" id="modalClose">✕</button>
     </div>
-</div>
-
-<!-- ===================================================================== -->
-<!-- MODALS -->
-<!-- ===================================================================== -->
-
-<!-- Modal: Create Event -->
-<div class="modal-overlay" id="modalCreateEvent">
-    <div class="modal-card">
-        <div class="modal-header">
-            <h3>Create New Event</h3>
-            <button class="modal-close" onclick="App.closeModal('modalCreateEvent')">✕</button>
-        </div>
-        <form onsubmit="EventsModule.handleCreateSubmit(event)">
-            <div class="modal-body">
-                <div class="form-group">
-                    <label>Event Title</label>
-                    <input type="text" name="title" class="form-control" required placeholder="e.g. Royal Deccan Heritage Wedding">
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Event Type</label>
-                        <select name="event_type" class="form-control">
-                            <option value="Wedding">Wedding</option>
-                            <option value="Tech Conference">Tech Conference</option>
-                            <option value="Birthday Gala">Birthday Gala</option>
-                            <option value="Corporate Summit">Corporate Summit</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Status</label>
-                        <select name="status" class="form-control">
-                            <option value="Planning">Planning</option>
-                            <option value="Confirmed">Confirmed</option>
-                            <option value="In-Progress">In-Progress</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label>Venue Location</label>
-                    <input type="text" name="venue" class="form-control" required placeholder="e.g. Taj Falaknuma Palace, Hyderabad">
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Date</label>
-                        <input type="date" name="event_date" class="form-control" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Start Time</label>
-                        <input type="time" name="start_time" class="form-control" value="18:30" required>
-                    </div>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Target Guests</label>
-                        <input type="number" name="target_guests" class="form-control" value="200" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Total Budget (₹)</label>
-                        <input type="number" name="total_budget" class="form-control" value="500000" required>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label>Description & Notes</label>
-                    <textarea name="description" class="form-control" rows="2" placeholder="Brief event summary..."></textarea>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" onclick="App.closeModal('modalCreateEvent')">Cancel</button>
-                <button type="submit" class="btn btn-primary">Save Event</button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<!-- Modal: Book Vendor -->
-<div class="modal-overlay" id="modalBookVendor">
-    <div class="modal-card">
-        <div class="modal-header">
-            <h3>Book Service Vendor</h3>
-            <button class="modal-close" onclick="App.closeModal('modalBookVendor')">✕</button>
-        </div>
-        <form onsubmit="VendorsModule.handleBookingSubmit(event)">
-            <input type="hidden" id="bookingVendorId" name="vendor_id">
-            <div class="modal-body">
-                <div class="form-group">
-                    <label>Selected Vendor</label>
-                    <div id="bookingVendorName" style="font-weight: 700; font-size: 16px; color: var(--accent-cyan);">--</div>
-                </div>
-                <div class="form-group">
-                    <label>Target Event</label>
-                    <select id="bookingEventSelect" name="event_id" class="form-control" required>
-                        <!-- Injected -->
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Agreed Contract Cost (₹)</label>
-                    <input type="number" id="bookingAgreedCost" name="agreed_cost" class="form-control" required>
-                </div>
-                <div class="form-group">
-                    <label>Service Deliverables & Notes</label>
-                    <textarea name="service_notes" class="form-control" rows="2" placeholder="e.g. 4K live stream, 3-course banquet..."></textarea>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" onclick="App.closeModal('modalBookVendor')">Cancel</button>
-                <button type="submit" class="btn btn-primary">Confirm Booking</button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<!-- Modal: Add Guest -->
-<div class="modal-overlay" id="modalAddGuest">
-    <div class="modal-card">
-        <div class="modal-header">
-            <h3>Add Guest to Guestlist</h3>
-            <button class="modal-close" onclick="App.closeModal('modalAddGuest')">✕</button>
-        </div>
-        <form onsubmit="GuestsModule.handleAddSubmit(event)">
-            <div class="modal-body">
-                <div class="form-group">
-                    <label>Target Event</label>
-                    <select id="guestEventSelect" name="event_id" class="form-control" required>
-                        <!-- Injected -->
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Guest Full Name</label>
-                    <input type="text" name="full_name" class="form-control" required placeholder="e.g. Dr. Alan Turing">
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Email Address</label>
-                        <input type="email" name="email" class="form-control" required placeholder="alan@acm.org">
-                    </div>
-                    <div class="form-group">
-                        <label>Phone Number</label>
-                        <input type="tel" name="phone" class="form-control" placeholder="+91 9876543210">
-                    </div>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>RSVP Status</label>
-                        <select name="rsvp_status" class="form-control">
-                            <option value="Attending">Attending</option>
-                            <option value="Pending" selected>Pending</option>
-                            <option value="Declined">Declined</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Dietary Preference</label>
-                        <select name="dietary_pref" class="form-control">
-                            <option value="Standard">Standard</option>
-                            <option value="Vegetarian">Vegetarian</option>
-                            <option value="Vegan">Vegan</option>
-                            <option value="Halal">Halal</option>
-                            <option value="Gluten-Free">Gluten-Free</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label>Plus Ones (Additional Attendees)</label>
-                    <input type="number" name="plus_ones" class="form-control" value="0" min="0" max="5">
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" onclick="App.closeModal('modalAddGuest')">Cancel</button>
-                <button type="submit" class="btn btn-primary">Add Guest</button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<!-- Modal: Add Expense -->
-<div class="modal-overlay" id="modalAddExpense">
-    <div class="modal-card">
-        <div class="modal-header">
-            <h3>Log Itemized Expense</h3>
-            <button class="modal-close" onclick="App.closeModal('modalAddExpense')">✕</button>
-        </div>
-        <form onsubmit="BudgetModule.handleAddSubmit(event)">
-            <div class="modal-body">
-                <div class="form-group">
-                    <label>Target Event</label>
-                    <select id="expenseEventSelect" name="event_id" class="form-control" required>
-                        <!-- Injected -->
-                    </select>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Expense Category</label>
-                        <select name="category" class="form-control">
-                            <option value="Venue">Venue</option>
-                            <option value="Catering">Catering</option>
-                            <option value="Media">Media & Photography</option>
-                            <option value="Entertainment">Entertainment & Audio</option>
-                            <option value="Decor">Decor & Styling</option>
-                            <option value="Logistics">Logistics & Security</option>
-                            <option value="Miscellaneous">Miscellaneous</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Payment Status</label>
-                        <select name="payment_status" class="form-control">
-                            <option value="Unpaid">Unpaid</option>
-                            <option value="Partially Paid">Partially Paid</option>
-                            <option value="Paid">Paid</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label>Item / Vendor Description</label>
-                    <input type="text" name="item_name" class="form-control" required placeholder="e.g. Stage Sound & Acoustic Engineering">
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Estimated Cost (₹)</label>
-                        <input type="number" name="estimated_cost" class="form-control" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Actual Invoiced Cost (₹)</label>
-                        <input type="number" name="actual_cost" class="form-control" required>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" onclick="App.closeModal('modalAddExpense')">Cancel</button>
-                <button type="submit" class="btn btn-primary">Log Expense</button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<!-- Modal: Record Payment -->
-<div class="modal-overlay" id="modalRecordPayment">
-    <div class="modal-card">
-        <div class="modal-header">
-            <h3>Record Financial Payment</h3>
-            <button class="modal-close" onclick="App.closeModal('modalRecordPayment')">✕</button>
-        </div>
-        <form onsubmit="PaymentsModule.handleAddSubmit(event)">
-            <div class="modal-body">
-                <div class="form-group">
-                    <label>Target Event</label>
-                    <select id="paymentEventSelect" name="event_id" class="form-control" required>
-                        <!-- Injected -->
-                    </select>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Amount Paid (₹)</label>
-                        <input type="number" name="amount" class="form-control" required placeholder="e.g. 50000">
-                    </div>
-                    <div class="form-group">
-                        <label>Payment Method</label>
-                        <select name="payment_method" class="form-control">
-                            <option value="UPI">UPI</option>
-                            <option value="Net Banking">Net Banking</option>
-                            <option value="Bank Wire">Bank Wire</option>
-                            <option value="Credit Card">Credit Card</option>
-                            <option value="Cash">Cash</option>
-                        </select>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" onclick="App.closeModal('modalRecordPayment')">Cancel</button>
-                <button type="submit" class="btn btn-primary">Record Payment</button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<!-- Modal: Printable Invoice / Receipt -->
-<div class="modal-overlay" id="modalInvoice">
-    <div class="modal-card" style="max-width: 680px; background: transparent; border: none; box-shadow: none;">
-        <div id="invoiceContent">
-            <!-- Injected by PaymentsModule.viewInvoice() -->
-        </div>
-        <div style="text-align: right; margin-top: 14px;">
-            <button class="btn btn-secondary" onclick="App.closeModal('modalInvoice')">Close</button>
-            <button class="btn btn-primary" onclick="window.print()">🖨️ Print Receipt</button>
-        </div>
-    </div>
-</div>
-
-<!-- Modal: Supabase Cloud PostgreSQL Configuration -->
-<div class="modal-overlay" id="modalSupabaseConfig">
-    <div class="modal-card" style="max-width: 620px;">
-        <div class="modal-header">
-            <div style="display: flex; align-items: center; gap: 12px;">
-                <div style="width: 38px; height: 38px; border-radius: var(--radius-md); background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 19px; font-weight: 800; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);">⚡</div>
-                <div>
-                    <h3>Supabase Cloud PostgreSQL Backend</h3>
-                    <p style="font-size: 12px; color: var(--text-muted);">Connect your live PostgreSQL cloud database instance</p>
-                </div>
-            </div>
-            <button class="modal-close" onclick="App.closeModal('modalSupabaseConfig')">&times;</button>
-        </div>
-        <div class="modal-body" style="display: flex; flex-direction: column; gap: 16px;">
-            <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.22); border-radius: var(--radius-md); padding: 14px 16px; font-size: 12.5px; line-height: 1.5; color: var(--text-high);">
-                <strong>🎓 Live DBMS Cloud Architecture:</strong> Connect your free Supabase project to enforce real PostgreSQL foreign keys, relational constraints, and real-time cloud data synchronization.
-            </div>
-
-            <div class="form-group">
-                <label>Supabase Project URL</label>
-                <input type="url" id="inputSupabaseUrl" class="form-control" placeholder="https://xyzcompany.supabase.co" />
-                <span style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;">Found in Supabase Dashboard -> Project Settings -> API</span>
-            </div>
-
-            <div class="form-group">
-                <label>Supabase Anon / Public API Key</label>
-                <input type="password" id="inputSupabaseKey" class="form-control" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." />
-                <span style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;">Public anonymous key (safe for browser client requests)</span>
-            </div>
-
-            <div id="supabaseConnectionDetails" style="display: none; padding: 12px 14px; border-radius: var(--radius-md); font-size: 12px; transition: all 0.2s ease;"></div>
-
-            <div style="display: flex; gap: 10px; flex-wrap: wrap; padding-top: 4px;">
-                <button type="button" class="btn btn-secondary btn-sm" onclick="App.copySupabaseSchema()" style="flex: 1;">
-                    📋 Copy PostgreSQL Schema (SQL)
-                </button>
-                <button type="button" class="btn btn-secondary btn-sm" onclick="App.seedSupabaseCloud()" style="flex: 1;">
-                    ☁️ Sync Local Data to Supabase
-                </button>
-            </div>
-        </div>
-        <div class="modal-footer" style="justify-content: space-between;">
-            <button type="button" class="btn btn-secondary" onclick="App.clearSupabaseConfig()">Disconnect</button>
-            <div style="display: flex; gap: 10px;">
-                <button type="button" class="btn btn-secondary" onclick="App.closeModal('modalSupabaseConfig')">Cancel</button>
-                <button type="button" class="btn btn-primary" onclick="App.saveSupabaseConfig()">Save & Test Connection</button>
-            </div>
-        </div>
-    </div>
+    <div id="modalBody"></div>
+  </div>
 </div>
 
 <!-- Toast Container -->
 <div class="toast-container" id="toastContainer"></div>
 
-<!-- Supabase Client SDK -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/supabaseClient.js"></script>
-
-<!-- Application JavaScript Bundles -->
-<script src="js/db.js"></script>
-<script src="js/threeScene.js"></script>
-<script src="js/interactiveFx.js"></script>
+<!-- ── Scripts ─────────────────────────────────────────────────────── -->
+<script src="js/data.js"></script>
+<script src="js/modules/auth.js"></script>
+<script src="js/modules/landing.js"></script>
 <script src="js/modules/events.js"></script>
-<script src="js/modules/vendors.js"></script>
+<script src="js/modules/dashboard.js"></script>
 <script src="js/modules/guests.js"></script>
 <script src="js/modules/budget.js"></script>
-<script src="js/modules/payments.js"></script>
-<script src="js/modules/dbmsStudio.js"></script>
+<script src="js/modules/vendors.js"></script>
+<script src="js/modules/tasks.js"></script>
+<script src="js/modules/venue.js"></script>
+<script src="js/modules/schedule.js"></script>
+<script src="js/modules/liveControl.js"></script>
+<script src="js/modules/analytics.js"></script>
+<script src="js/modules/catering.js"></script>
+<script src="js/modules/transport.js"></script>
+<script src="js/modules/accommodation.js"></script>
+<script src="js/modules/invitations.js"></script>
+<script src="js/modules/media.js"></script>
 <script src="js/app.js"></script>
 
 </body>

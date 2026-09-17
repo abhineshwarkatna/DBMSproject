@@ -1,0 +1,115 @@
+/* =====================================================================
+   EVENTORA 3.0 — Animations & Motion System
+   ===================================================================== */
+
+/* ── Keyframes ───────────────────────────────────────────────────────── */
+@keyframes fadeIn       { from{opacity:0}              to{opacity:1} }
+@keyframes fadeInUp     { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:none} }
+@keyframes fadeInDown   { from{opacity:0;transform:translateY(-16px)} to{opacity:1;transform:none} }
+@keyframes fadeInLeft   { from{opacity:0;transform:translateX(-24px)} to{opacity:1;transform:none} }
+@keyframes fadeInRight  { from{opacity:0;transform:translateX(24px)} to{opacity:1;transform:none} }
+@keyframes scaleIn      { from{opacity:0;transform:scale(0.92)} to{opacity:1;transform:scale(1)} }
+@keyframes slideUp      { from{transform:translateY(100%)} to{transform:translateY(0)} }
+@keyframes slideDown    { from{transform:translateY(0)} to{transform:translateY(100%)} }
+@keyframes shimmer      { 0%{background-position:200%} 100%{background-position:-200%} }
+@keyframes pulse        { 0%,100%{opacity:1} 50%{opacity:0.5} }
+@keyframes orbFloat     { 0%,100%{transform:translateY(0) scale(1)} 50%{transform:translateY(-20px) scale(1.04)} }
+@keyframes heroImageReveal { from{clip-path:inset(100% 0 0 0)} to{clip-path:inset(0 0 0 0)} }
+@keyframes countUp      { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
+@keyframes checkmark    { from{stroke-dashoffset:50} to{stroke-dashoffset:0} }
+@keyframes floatCard    { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
+@keyframes livePulse    { 0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,0.4)} 50%{box-shadow:0 0 0 8px rgba(239,68,68,0)} }
+
+/* ── Animation Utilities ─────────────────────────────────────────────── */
+.anim-fade-in     { animation:fadeIn     0.3s var(--ease) both; }
+.anim-fade-up     { animation:fadeInUp   0.4s var(--ease) both; }
+.anim-fade-down   { animation:fadeInDown 0.4s var(--ease) both; }
+.anim-scale-in    { animation:scaleIn    0.3s var(--ease-spring) both; }
+.anim-slide-up    { animation:slideUp    0.35s var(--ease) both; }
+
+/* Delays */
+.delay-1 { animation-delay:0.1s; }
+.delay-2 { animation-delay:0.15s; }
+.delay-3 { animation-delay:0.2s; }
+.delay-4 { animation-delay:0.25s; }
+.delay-5 { animation-delay:0.3s; }
+.delay-6 { animation-delay:0.4s; }
+.delay-7 { animation-delay:0.5s; }
+
+/* ── Scroll Reveal ───────────────────────────────────────────────────── */
+.reveal { opacity:0; transform:translateY(32px); transition:opacity 0.6s var(--ease),transform 0.6s var(--ease); }
+.reveal.visible { opacity:1; transform:none; }
+.reveal-left  { opacity:0; transform:translateX(-32px); transition:opacity 0.6s var(--ease),transform 0.6s var(--ease); }
+.reveal-left.visible { opacity:1; transform:none; }
+.reveal-right { opacity:0; transform:translateX(32px); transition:opacity 0.6s var(--ease),transform 0.6s var(--ease); }
+.reveal-right.visible { opacity:1; transform:none; }
+
+/* ── Stagger children ────────────────────────────────────────────────── */
+.stagger > * { opacity:0; transform:translateY(20px); transition:opacity 0.4s var(--ease),transform 0.4s var(--ease); }
+.stagger.visible > *:nth-child(1) { opacity:1;transform:none;transition-delay:0s; }
+.stagger.visible > *:nth-child(2) { opacity:1;transform:none;transition-delay:0.07s; }
+.stagger.visible > *:nth-child(3) { opacity:1;transform:none;transition-delay:0.14s; }
+.stagger.visible > *:nth-child(4) { opacity:1;transform:none;transition-delay:0.21s; }
+.stagger.visible > *:nth-child(5) { opacity:1;transform:none;transition-delay:0.28s; }
+.stagger.visible > *:nth-child(6) { opacity:1;transform:none;transition-delay:0.35s; }
+.stagger.visible > *:nth-child(n+7) { opacity:1;transform:none;transition-delay:0.42s; }
+
+/* ── Hover Interactions ──────────────────────────────────────────────── */
+.hover-lift { transition:transform var(--t-base) var(--ease),box-shadow var(--t-base) var(--ease); }
+.hover-lift:hover { transform:translateY(-4px); box-shadow:var(--shadow-lg); }
+.hover-lift-sm:hover { transform:translateY(-2px); box-shadow:var(--shadow-md); }
+.hover-scale { transition:transform var(--t-base) var(--ease); }
+.hover-scale:hover { transform:scale(1.02); }
+
+/* ── Page Transitions ────────────────────────────────────────────────── */
+.view { animation:fadeIn 0.25s var(--ease) both; }
+.view.active { display:block; animation:fadeIn 0.3s var(--ease) both; }
+.tab-content { animation:fadeInUp 0.25s var(--ease) both; }
+
+/* ── Image hover zoom ────────────────────────────────────────────────── */
+.img-hover-zoom { overflow:hidden; }
+.img-hover-zoom img { transition:transform 0.5s var(--ease); }
+.img-hover-zoom:hover img { transform:scale(1.08); }
+
+/* ── Live indicator pulse ────────────────────────────────────────────── */
+.live-dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--danger); animation:livePulse 1.5s ease-in-out infinite; }
+
+/* ── Float cards ─────────────────────────────────────────────────────── */
+.float-card { animation:floatCard 3s ease-in-out infinite; }
+.float-card:nth-child(2) { animation-delay:-1s; }
+.float-card:nth-child(3) { animation-delay:-2s; }
+
+/* ── Counter animation ───────────────────────────────────────────────── */
+.stat-counter { animation:countUp 0.5s var(--ease) both; }
+
+/* ── Modal animation ─────────────────────────────────────────────────── */
+.modal-backdrop.open .modal { animation:scaleIn 0.25s var(--ease-spring) both; }
+
+/* ── Gradient orbs (subtle) ──────────────────────────────────────────── */
+.orb {
+  position:absolute; border-radius:50%; pointer-events:none;
+  animation:orbFloat 8s ease-in-out infinite;
+}
+.orb-violet { background:radial-gradient(circle,rgba(124,58,237,0.12),transparent 70%); }
+.orb-amber  { background:radial-gradient(circle,rgba(245,158,11,0.10),transparent 70%); }
+.orb-pink   { background:radial-gradient(circle,rgba(236,72,153,0.08),transparent 70%); }
+
+/* ── Wizard step transition ──────────────────────────────────────────── */
+.wizard-panel { display:none; }
+.wizard-panel.active { display:block; animation:fadeInUp 0.3s var(--ease) both; }
+
+/* ── Task check animation ────────────────────────────────────────────── */
+.task-done-anim { animation:scaleIn 0.2s var(--ease-spring) both; }
+
+/* ── Notification bounce ─────────────────────────────────────────────── */
+@keyframes notifBounce { 0%,100%{transform:translateY(0)} 30%{transform:translateY(-6px)} 60%{transform:translateY(-3px)} }
+.notif-bounce { animation:notifBounce 0.5s var(--ease) both; }
+
+/* ── Hero background pattern ─────────────────────────────────────────── */
+.hero-grid-bg {
+  background-image:
+    linear-gradient(var(--border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border) 1px, transparent 1px);
+  background-size:40px 40px;
+  opacity:0.4;
+}
