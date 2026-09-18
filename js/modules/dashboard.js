@@ -42,7 +42,7 @@ window.DashboardModule = (() => {
       <div class="event-workspace-header">
         <div class="ewh-cover">
           <img src="${coverImg}?w=1200&q=80&auto=format&fit=crop" alt="${ev.title}" loading="lazy"
-               onerror="this.onerror=null;this.src='${IMGS.wedding}?w=1200&q=80&auto=format&fit=crop'">
+               onerror="this.onerror=null;this.src='assets/bg/eventora_bg.jpg'">
 
           <div class="ewh-cover-overlay"></div>
           <div class="ewh-cover-content">

@@ -144,8 +144,14 @@ window.App = (() => {
     setTimeout(() => { _routingBusy = false; }, 1500);
     const action = _pendingAction || 'dashboard';
     _pendingAction = null;
-    if (action === 'wizard') goWizard();
-    else goDashboard();
+    // Brand-new user with no events → go straight to wizard
+    if (action !== 'wizard' && EventoraDB.getAllEvents().length === 0) {
+      goWizard();
+    } else if (action === 'wizard') {
+      goWizard();
+    } else {
+      goDashboard();
+    }
   };
 
   const goWizard = (categoryPreset) => {
@@ -177,7 +183,7 @@ window.App = (() => {
     if (dateEl) dateEl.textContent = ev.eventDate ? new Date(ev.eventDate).toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' }) : 'Date TBD';
     if (imgEl) {
       imgEl.src = IMGS[ev.coverImage] || IMGS.wedding;
-      imgEl.onerror = () => { imgEl.src = IMGS.wedding; };
+      imgEl.onerror = () => { imgEl.onerror = null; imgEl.src = 'assets/bg/eventora_bg.jpg'; };
     }
     if (statusEl) {
       const s = ev.status || 'Planning';

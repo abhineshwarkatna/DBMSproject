@@ -10,14 +10,57 @@ window.EventoraDB = (() => {
   // Returns the storage key for the current user
   const _key = () => _userId ? `${BASE_KEY}_${_userId}` : BASE_KEY;
 
+  // Remove the hardcoded demo event that was auto-seeded for new users.
+  // Scans both the in-memory db AND every eventora_v3* localStorage key
+  // so the purge works regardless of which user namespace it was saved under.
+  const _purgeDemoData = () => {
+    const DEMO_TITLE = 'Royal Deccan Heritage Wedding';
+
+    // 1. Purge from current in-memory db
+    let changed = false;
+    Object.keys(db.events || {}).forEach(id => {
+      if (db.events[id]?.title === DEMO_TITLE) {
+        delete db.events[id];
+        if (db.activeEventId === id) db.activeEventId = null;
+        changed = true;
+      }
+    });
+    if (db.activeEventId === null) {
+      const remaining = Object.keys(db.events || {});
+      db.activeEventId = remaining.length > 0 ? remaining[0] : null;
+    }
+    if (changed) save();
+
+    // 2. Also purge from every other eventora_v3* key sitting in localStorage
+    Object.keys(localStorage).forEach(storageKey => {
+      if (!storageKey.startsWith(BASE_KEY)) return;
+      if (storageKey === _key()) return; // already handled above
+      try {
+        const parsed = JSON.parse(localStorage.getItem(storageKey));
+        if (!parsed?.events) return;
+        let dirty = false;
+        Object.keys(parsed.events).forEach(id => {
+          if (parsed.events[id]?.title === DEMO_TITLE) {
+            delete parsed.events[id];
+            if (parsed.activeEventId === id) parsed.activeEventId = null;
+            dirty = true;
+          }
+        });
+        if (dirty) localStorage.setItem(storageKey, JSON.stringify(parsed));
+      } catch (e) { /* ignore corrupt entries */ }
+    });
+  };
+
+
   // Switch active user — call after login/signup, pass null on logout
   const setUser = (userId) => {
     _userId = userId;
     const saved = localStorage.getItem(_key());
     if (saved) { try { db = JSON.parse(saved); } catch(e) { db = {}; } }
     else { db = {}; }
-    if (!db.events)       db.events = {};
+    if (!db.events)        db.events = {};
     if (!db.activeEventId) db.activeEventId = null;
+    _purgeDemoData(); // remove any previously-seeded fake event
     save();
   };
 

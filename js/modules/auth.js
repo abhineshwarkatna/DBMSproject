@@ -106,7 +106,6 @@ window.AuthModule = (() => {
         await _syncProfile(user);
         updateNavActions();
         updateSidebarUser();
-        if (EventoraDB.getAllEvents().length === 0) EventoraDB.seedDemoData();
         _cleanHash(); // remove #access_token= from URL
         App.afterAuth();
       }
@@ -201,7 +200,6 @@ window.AuthModule = (() => {
       await _syncProfile(user);
       updateNavActions();
       updateSidebarUser();
-      if (EventoraDB.getAllEvents().length === 0) EventoraDB.seedDemoData();
       // Clean #access_token= hash from URL so it doesn't interfere with app routing
       _cleanHash();
       console.log('[Eventora Auth] Session restored ✓ for:', user.email);
