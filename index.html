@@ -307,7 +307,6 @@
         <span class="nav-search-icon">🔍</span>
         <input id="homeSearchInput" placeholder="Search catering, venues, decorators, DJs..." autocomplete="off">
       </div>
-      <div class="ecosystem-role-bar"></div>
       <div class="nav-links-area">
         <div class="nav-link-btn" onclick="App.switchTab('vendors');App.goDashboard()">Marketplace</div>
         <div class="nav-link-btn" onclick="App.scrollTo('categories-section')">Categories</div>
@@ -707,7 +706,6 @@
             <div class="topbar-page-sub" id="topbarSub">Your event workspace</div>
           </div>
         </div>
-        <div class="ecosystem-role-bar" style="margin:0 12px"></div>
         <div class="dash-topbar-right">
           <span id="dashEventStatus" class="badge badge-amber">⏳ Planning</span>
           <button class="btn btn-secondary btn-sm" onclick="App.requireAuth('wizard')">+ New Event</button>
@@ -763,15 +761,28 @@
      VIEW: VENDOR (Merchant Partner Portal)
 ══════════════════════════════════════════════════════════════════════ -->
 <div id="view-vendor" class="view">
-  <nav class="top-nav">
-    <div class="nav-inner">
-      <a class="nav-logo" href="#" onclick="App.goDashboard();return false">
-        <img src="assets/logo.png" alt="Eventora" style="height:36px;width:auto;object-fit:contain">
-      </a>
-      <div class="ecosystem-role-bar"></div>
-      <div class="nav-actions">
-        <button class="btn btn-secondary btn-sm" onclick="App.switchRole('customer')">Customer Portal</button>
-        <button class="btn btn-ghost btn-sm" onclick="AuthModule.logout()">Sign Out</button>
+  <nav class="top-nav" style="border-bottom:1.5px solid var(--border)">
+    <div class="nav-inner" style="display:flex;align-items:center;justify-content:space-between">
+      <div style="display:flex;align-items:center;gap:14px">
+        <a class="nav-logo" href="#" onclick="App.goVendor();return false" style="padding:0">
+          <img src="assets/logo.png" alt="Eventora" style="height:36px;width:auto;object-fit:contain;display:block">
+        </a>
+        <div style="display:inline-flex;align-items:center;gap:8px;padding:4px 12px;background:rgba(139,92,246,0.1);border:1px solid rgba(139,92,246,0.25);border-radius:999px">
+          <span style="font-size:13px">🍽️</span>
+          <span style="font-size:12px;font-weight:700;color:var(--brand);letter-spacing:0.3px;text-transform:uppercase">Merchant Partner Portal</span>
+        </div>
+      </div>
+      <div class="nav-actions" style="display:flex;align-items:center;gap:14px">
+        <div id="vendorNavProfile" style="display:flex;align-items:center;gap:8px">
+          <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#8b5cf6,#ec4899);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700">🍽️</div>
+          <div style="text-align:left;line-height:1.2">
+            <div id="vendorNavBusinessName" style="font-size:13px;font-weight:700;color:var(--text-primary)">Merchant Partner</div>
+            <div id="vendorNavUserEmail" style="font-size:11px;color:var(--text-muted)">Verified Merchant Storefront</div>
+          </div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="AuthModule.logout()" style="color:var(--danger);font-weight:600">
+          Sign Out
+        </button>
       </div>
     </div>
   </nav>
@@ -782,15 +793,28 @@
      VIEW: EMPLOYEE (Field Staff & Operations App)
 ══════════════════════════════════════════════════════════════════════ -->
 <div id="view-employee" class="view">
-  <nav class="top-nav">
-    <div class="nav-inner">
-      <a class="nav-logo" href="#" onclick="App.goDashboard();return false">
-        <img src="assets/logo.png" alt="Eventora" style="height:36px;width:auto;object-fit:contain">
-      </a>
-      <div class="ecosystem-role-bar"></div>
-      <div class="nav-actions">
-        <button class="btn btn-secondary btn-sm" onclick="App.switchRole('customer')">Customer Portal</button>
-        <button class="btn btn-ghost btn-sm" onclick="AuthModule.logout()">Sign Out</button>
+  <nav class="top-nav" style="border-bottom:1.5px solid var(--border)">
+    <div class="nav-inner" style="display:flex;align-items:center;justify-content:space-between">
+      <div style="display:flex;align-items:center;gap:14px">
+        <a class="nav-logo" href="#" onclick="App.goEmployee();return false" style="padding:0">
+          <img src="assets/logo.png" alt="Eventora" style="height:36px;width:auto;object-fit:contain;display:block">
+        </a>
+        <div style="display:inline-flex;align-items:center;gap:8px;padding:4px 12px;background:rgba(20,184,166,0.1);border:1px solid rgba(20,184,166,0.25);border-radius:999px">
+          <span style="font-size:13px">👷</span>
+          <span style="font-size:12px;font-weight:700;color:var(--secondary);letter-spacing:0.3px;text-transform:uppercase">Field Staff Operations</span>
+        </div>
+      </div>
+      <div class="nav-actions" style="display:flex;align-items:center;gap:14px">
+        <div id="staffNavProfile" style="display:flex;align-items:center;gap:8px">
+          <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#14b8a6,#06b6d4);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700">👷</div>
+          <div style="text-align:left;line-height:1.2">
+            <div id="staffNavEmpName" style="font-size:13px;font-weight:700;color:var(--text-primary)">Field Coordinator</div>
+            <div style="font-size:11px;color:var(--text-muted)">Live Dispatch & Checklists</div>
+          </div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="AuthModule.logout()" style="color:var(--danger);font-weight:600">
+          Sign Out
+        </button>
       </div>
     </div>
   </nav>
@@ -801,15 +825,22 @@
      VIEW: ADMIN (Platform Command Center)
 ══════════════════════════════════════════════════════════════════════ -->
 <div id="view-admin" class="view">
-  <nav class="top-nav">
-    <div class="nav-inner">
-      <a class="nav-logo" href="#" onclick="App.goDashboard();return false">
-        <img src="assets/logo.png" alt="Eventora" style="height:36px;width:auto;object-fit:contain">
-      </a>
-      <div class="ecosystem-role-bar"></div>
+  <nav class="top-nav" style="border-bottom:1.5px solid var(--border)">
+    <div class="nav-inner" style="display:flex;align-items:center;justify-content:space-between">
+      <div style="display:flex;align-items:center;gap:14px">
+        <a class="nav-logo" href="#" onclick="App.goAdmin();return false" style="padding:0">
+          <img src="assets/logo.png" alt="Eventora" style="height:36px;width:auto;object-fit:contain;display:block">
+        </a>
+        <div style="display:inline-flex;align-items:center;gap:8px;padding:4px 12px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);border-radius:999px">
+          <span style="font-size:13px">🛡️</span>
+          <span style="font-size:12px;font-weight:700;color:var(--danger);letter-spacing:0.3px;text-transform:uppercase">Super Admin Command Center</span>
+        </div>
+      </div>
+      <div class="ecosystem-role-bar" id="adminRoleSwitcherBar"></div>
       <div class="nav-actions">
-        <button class="btn btn-secondary btn-sm" onclick="App.switchRole('customer')">Customer Portal</button>
-        <button class="btn btn-ghost btn-sm" onclick="AuthModule.logout()">Sign Out</button>
+        <button class="btn btn-secondary btn-sm" onclick="AuthModule.logout()" style="color:var(--danger);font-weight:600">
+          Sign Out
+        </button>
       </div>
     </div>
   </nav>

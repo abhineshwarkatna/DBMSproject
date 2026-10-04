@@ -19,6 +19,14 @@ window.AuthModule = (() => {
   const getUser    = () => _currentUser;
   const getProfile = () => _profile;
   const isLoggedIn = () => !!_currentUser;
+  const getUserRole = () => {
+    if (!_currentUser) return 'guest';
+    const metaRole = _currentUser.user_metadata?.role;
+    const appRole  = _currentUser.app_metadata?.role;
+    const profRole = _profile?.role;
+    const dbRole   = window.EventoraDB?.getCurrentRole ? window.EventoraDB.getCurrentRole() : null;
+    return metaRole || appRole || profRole || dbRole || 'customer';
+  };
 
   // ── Offline / Local Session Storage ───────────────────────────────────
   const _getOfflineSession = () => {
@@ -680,18 +688,47 @@ window.AuthModule = (() => {
     const meta  = user.user_metadata || {};
     const name  = meta.full_name || meta.name || user.email?.split('@')[0];
     const email = user.email || '';
-    const role  = EventoraDB.getCurrentRole();
+    const role  = getUserRole();
+
+    const roleBadges = {
+      vendor:   '🍽️ VERIFIED VENDOR PARTNER',
+      employee: '👷 OPERATIONS FIELD STAFF',
+      admin:    '🛡️ PLATFORM SUPER ADMIN',
+      customer: '👤 EVENT HOST / CUSTOMER'
+    };
+
+    let actionsHtml = '';
+    if (role === 'vendor') {
+      actionsHtml = `
+        <button class="btn btn-secondary btn-full mb-2" onclick="Modal.close();App.goVendor()">Merchant Dashboard</button>
+        <button class="btn btn-secondary btn-full mb-2" onclick="Modal.close();AuthModule.showProfile()">Profile Settings</button>
+      `;
+    } else if (role === 'employee') {
+      actionsHtml = `
+        <button class="btn btn-secondary btn-full mb-2" onclick="Modal.close();App.goEmployee()">Dispatch Operations</button>
+        <button class="btn btn-secondary btn-full mb-2" onclick="Modal.close();AuthModule.showProfile()">Profile Settings</button>
+      `;
+    } else if (role === 'admin') {
+      actionsHtml = `
+        <button class="btn btn-secondary btn-full mb-2" onclick="Modal.close();App.goAdmin()">Command Center</button>
+        <button class="btn btn-secondary btn-full mb-2" onclick="Modal.close();AuthModule.showProfile()">Profile Settings</button>
+      `;
+    } else {
+      actionsHtml = `
+        <button class="btn btn-secondary btn-full mb-2" onclick="Modal.close();App.goDashboard()">My Events</button>
+        <button class="btn btn-secondary btn-full mb-2" onclick="Modal.close();AuthModule.showProfile()">Profile Settings</button>
+      `;
+    }
 
     Modal.open('Your Account',
       `<div style="text-align:center;padding:8px 0">
         <div style="font-size:16px;font-weight:700">${name}</div>
         <div style="font-size:13px;color:var(--text-muted);margin-bottom:8px">${email}</div>
         <div style="display:inline-block;padding:3px 10px;border-radius:999px;background:var(--bg-subtle);font-size:11px;font-weight:700;border:1px solid var(--border)">
-          ROLE: ${role.toUpperCase()}
+          ${roleBadges[role] || 'ROLE: ' + role.toUpperCase()}
         </div>
       </div>
-      <button class="btn btn-secondary btn-full mb-2" onclick="Modal.close();App.goDashboard()">My Events</button>
-      <button class="btn btn-secondary btn-full mb-2" onclick="Modal.close();AuthModule.showProfile()">Profile Settings</button>
+      ${actionsHtml}
       <button class="btn btn-ghost btn-full" style="color:var(--danger)" onclick="Modal.close();AuthModule.logout()">Sign Out</button>`);
   };
 
@@ -808,7 +845,7 @@ window.AuthModule = (() => {
   };
 
   return {
-    init, isLoggedIn, getUser, getProfile, logout,
+    init, isLoggedIn, getUser, getProfile, getUserRole, logout,
     loginOffline, quickLogin, confirmGoogleLogin, confirmGoogleCustom,
     updateNavActions, updateSidebarUser,
     showLogin, showSignup, showForgot, showReset,
