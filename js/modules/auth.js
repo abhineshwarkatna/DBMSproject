@@ -449,11 +449,18 @@ window.AuthModule = (() => {
         }
       }
 
-      // If cloud is paused, offline, or returns network failure:
-      // AUTOMATICALLY authenticate locally so the user is NEVER blocked!
-      console.log('[Eventora Auth] Logging in with local credential cache for:', email);
+      // Check if user is an existing registered user
+      const storedAccount = _getAccountByEmail(email);
+      if (!storedAccount && !window.EventoraSupabase?.isConnected) {
+        // Unknown user trying to sign in -> prompt to sign up and configure profile
+        _showError(errEl, `Account not found for <strong>${email}</strong>. <a href="javascript:void(0)" onclick="AuthModule.showSignupWithEmail('${email.replace(/'/g, "\\'")}')" style="color:var(--brand);font-weight:700;text-decoration:underline;margin-left:4px">Create an account</a> to set up your profile.`);
+        return;
+      }
+
+      // Existing user: continue directly to active workspace/portal!
+      console.log('[Eventora Auth] Existing user verified. Continuing into workspace for:', email);
       loginOffline(email);
-      Toast.show('success', 'Welcome back!', 'Connected with local database');
+      Toast.show('success', 'Welcome back!', 'Signed into active workspace');
 
     } catch (err) {
       console.warn('[Eventora Auth] Cloud login notice, auto-falling back to local session:', err);
@@ -464,21 +471,54 @@ window.AuthModule = (() => {
     }
   };
 
-  // ── Sign Up ────────────────────────────────────────────────────────────
+  // ── Step 1 Validation & New vs Old User Check ────────────────────────
+  const startOnboarding = () => {
+    const name     = document.getElementById('signupName')?.value?.trim();
+    const email    = document.getElementById('signupEmail')?.value?.trim();
+    const password = document.getElementById('signupPassword')?.value;
+    const confirm  = document.getElementById('signupConfirm')?.value;
+    const errEl    = document.getElementById('signupError');
+
+    _hideError(errEl);
+    if (!name)               { _showError(errEl, 'Please enter your full name.'); return; }
+    if (!email)              { _showError(errEl, 'Please enter your email.'); return; }
+    if (!email.includes('@') || !email.includes('.')) { _showError(errEl, 'Please enter a valid email address.'); return; }
+    if (!password)           { _showError(errEl, 'Please enter a password.'); return; }
+    if (password.length < 6) { _showError(errEl, 'Password must be at least 6 characters.'); return; }
+    if (password !== confirm) { _showError(errEl, 'Passwords do not match.'); return; }
+
+    // Check if the user is an old/existing user whose account is already set up
+    const existing = _getAccountByEmail(email);
+    if (existing) {
+      const existingRole = (existing.role || existing.metadata?.role || 'customer').toUpperCase();
+      _showError(errEl, `This email is already registered and setup as an active <strong>${existingRole}</strong> account. <a href="javascript:void(0)" onclick="AuthModule.showLoginWithEmail('${email.replace(/'/g, "\\'")}')" style="color:var(--brand);font-weight:700;text-decoration:underline;margin-left:4px">Sign in here</a> to continue.`);
+      return;
+    }
+
+    // New user! Transition to Step 2 (Account Role & Business Profile Setup)
+    showOnboarding();
+  };
+
+  // ── Step 2 Sign Up & Profile Launch ──────────────────────────────────
   const signup = async () => {
     const name     = document.getElementById('signupName')?.value?.trim();
     const email    = document.getElementById('signupEmail')?.value?.trim();
     const password = document.getElementById('signupPassword')?.value;
     const confirm  = document.getElementById('signupConfirm')?.value;
     const btn      = document.getElementById('signupBtn');
-    const errEl    = document.getElementById('signupError');
+    const errEl    = document.getElementById('onboardingError') || document.getElementById('signupError');
 
     _hideError(errEl);
-    if (!name)               { _showError(errEl, 'Please enter your full name.'); return; }
-    if (!email)              { _showError(errEl, 'Please enter your email.'); return; }
-    if (!password)           { _showError(errEl, 'Please enter a password.'); return; }
-    if (password.length < 6) { _showError(errEl, 'Password must be at least 6 characters.'); return; }
-    if (password !== confirm) { _showError(errEl, 'Passwords do not match.'); return; }
+    if (!name || !email || !password) {
+      showSignup();
+      _showError(document.getElementById('signupError'), 'Please fill in your basic account credentials first.');
+      return;
+    }
+    if (password !== confirm) {
+      showSignup();
+      _showError(document.getElementById('signupError'), 'Passwords do not match.');
+      return;
+    }
 
     const role = document.getElementById('signupRole')?.value || 'customer';
 
@@ -524,7 +564,7 @@ window.AuthModule = (() => {
       userMetadata.area      = staffArea;
     }
 
-    _setLoading(btn, 'Creating account…');
+    _setLoading(btn, 'Setting up workspace…');
 
     try {
       const client = sb();
@@ -565,21 +605,23 @@ window.AuthModule = (() => {
           try { await _syncProfile(data.user); } catch (e) {}
           updateNavActions();
           updateSidebarUser();
-          Toast.show('success', 'Account Created!', `Welcome to Eventora as ${role.toUpperCase()}`);
+          Toast.show('success', 'Profile Setup Complete!', `Welcome to Eventora as ${role.toUpperCase()}`);
           App.afterAuth();
           return;
         }
       }
 
-      // If cloud is unreachable, register locally
-      console.log('[Eventora Auth] Registering user locally with role and category:', email, role, userMetadata);
+      // If cloud is unreachable or offline, register locally
+      console.log('[Eventora Auth] Registering new user profile locally:', email, role, userMetadata);
       loginOffline(email, role, userMetadata);
+      Toast.show('success', 'Profile Setup Complete!', `Welcome to Eventora as ${role.toUpperCase()}`);
 
     } catch (err) {
       console.warn('[Eventora Auth] Cloud signup notice, saving locally:', err);
       loginOffline(email, role, userMetadata);
+      Toast.show('success', 'Profile Setup Complete!', `Welcome to Eventora as ${role.toUpperCase()}`);
     } finally {
-      _setLoading(btn, 'Create Account', false);
+      _setLoading(btn, 'Complete Setup & Launch →', false);
     }
   };
 
@@ -908,15 +950,40 @@ window.AuthModule = (() => {
 
   // ── Form switching ────────────────────────────────────────────────────
   const showForm = (id) => {
-    ['authLogin', 'authSignup', 'authForgot', 'authReset'].forEach(f => {
+    ['authLogin', 'authSignup', 'authOnboarding', 'authForgot', 'authReset'].forEach(f => {
       const el = document.getElementById(f);
       if (el) el.style.display = (f === id) ? 'flex' : 'none';
     });
   };
-  const showLogin  = () => showForm('authLogin');
-  const showSignup = () => showForm('authSignup');
-  const showForgot = () => showForm('authForgot');
-  const showReset  = () => showForm('authReset');
+  const showLogin      = () => showForm('authLogin');
+  const showSignup     = () => showForm('authSignup');
+  const showOnboarding = () => {
+    showForm('authOnboarding');
+    const roleSelect = document.getElementById('signupRole');
+    if (roleSelect) onSignupRoleChange(roleSelect.value);
+  };
+  const showForgot     = () => showForm('authForgot');
+  const showReset      = () => showForm('authReset');
+
+  const showLoginWithEmail = (email) => {
+    showLogin();
+    const el = document.getElementById('loginEmail');
+    if (el && email) {
+      el.value = email;
+      const pwdEl = document.getElementById('loginPassword');
+      if (pwdEl) pwdEl.focus();
+    }
+  };
+
+  const showSignupWithEmail = (email) => {
+    showSignup();
+    const el = document.getElementById('signupEmail');
+    if (el && email) {
+      el.value = email;
+      const nameEl = document.getElementById('signupName');
+      if (nameEl) nameEl.focus();
+    }
+  };
 
   const _showEmailSent = (email) => {
     const panel = document.getElementById('authSignup');
@@ -986,7 +1053,8 @@ window.AuthModule = (() => {
     init, isLoggedIn, getUser, getProfile, getUserRole, logout,
     loginOffline, quickLogin, fillCredentials, onSignupRoleChange, confirmGoogleLogin, confirmGoogleCustom,
     updateNavActions, updateSidebarUser,
-    showLogin, showSignup, showForgot, showReset,
+    showLogin, showSignup, showOnboarding, startOnboarding, showForgot, showReset,
+    showLoginWithEmail, showSignupWithEmail,
     login, signup, googleLogin, sendReset, resetPassword,
     togglePwd, showUserMenu, showProfile,
   };
