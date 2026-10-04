@@ -50,11 +50,28 @@ window.VendorPortalModule = (() => {
 
     const reviews = EventoraDB.getReviewsForVendor(vendor.id);
 
+    const categoryIcons = {
+      'Catering': '🍽️',
+      'Venues': '🏠',
+      'Photography': '📸',
+      'Decor': '🌸',
+      'Entertainment': '🎵',
+      'Transport': '🚌',
+      'Security': '🛡️'
+    };
+    const catIcon = categoryIcons[vendor.category] || '🏢';
+
     // Update topbar identity
     const navBizName = document.getElementById('vendorNavBusinessName');
     if (navBizName) navBizName.textContent = vendor.name;
     const navEmail = document.getElementById('vendorNavUserEmail');
     if (navEmail) navEmail.textContent = `${vendor.category} Specialist · ${vendor.city}`;
+    const navCatIcon = document.getElementById('vendorNavCategoryIcon');
+    if (navCatIcon) navCatIcon.textContent = catIcon;
+    const navCatTitle = document.getElementById('vendorNavCategoryTitle');
+    if (navCatTitle) navCatTitle.textContent = `${vendor.category} Partner Portal`;
+    const navAvatar = document.getElementById('vendorNavAvatar');
+    if (navAvatar) navAvatar.textContent = catIcon;
 
     container.innerHTML = `
       <div class="vendor-portal-wrap">
@@ -63,7 +80,7 @@ window.VendorPortalModule = (() => {
           <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px">
             <div style="display:flex;align-items:center;gap:16px">
               <div class="vendor-avatar-box">
-                <span style="font-size:28px">🍽️</span>
+                <span style="font-size:28px">${catIcon}</span>
               </div>
               <div>
                 <div style="display:flex;align-items:center;gap:10px">
