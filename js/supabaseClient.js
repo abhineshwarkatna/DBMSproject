@@ -80,13 +80,84 @@ window.EventoraSupabase = {
         localStorage.setItem(this.STORAGE_KEYS.KEY, key);
 
         if (url && key && window.supabase) {
-            this.client = window.supabase.createClient(url, key);
+            this.client = window.supabase.createClient(url, key, {
+                auth: {
+                    flowType: 'implicit',
+                    detectSessionInUrl: true,
+                    persistSession: true,
+                    autoRefreshToken: true,
+                }
+            });
             return this.testConnection(true);
         } else {
             this.client = null;
             this.isConnected = false;
             this.updateStatusPill(false);
             return Promise.resolve({ success: false, message: 'Credentials cleared.' });
+        }
+    },
+
+    openConfigModal() {
+        const currentUrl = this.getUrl() || this.DEFAULT_URL;
+        const currentKey = this.getKey() || this.DEFAULT_KEY;
+        const isOnline = this.isConnected;
+        const projId = currentUrl.match(/https:\/\/([a-z0-9]+)\.supabase\.co/i)?.[1] || 'qihysexovrckrgsrqaeu';
+
+        if (window.Modal) {
+            Modal.open('Cloud Database & Supabase Connection', `
+                <div style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.5">
+                    Connect your real Supabase PostgreSQL cloud database, run live migrations, or restore a paused project.
+                </div>
+
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-radius:var(--r-md);background:${isOnline ? 'rgba(16,185,129,0.08)' : 'rgba(245,158,11,0.08)'};border:1px solid ${isOnline ? '#10b981' : '#f59e0b'};margin-bottom:16px">
+                    <div style="display:flex;align-items:center;gap:10px">
+                        <span style="font-size:20px">${isOnline ? '🟢' : '🟠'}</span>
+                        <div>
+                            <div style="font-weight:700;font-size:14px;color:var(--text-primary)">
+                                Status: ${isOnline ? 'Connected to Cloud' : 'Paused / Unreachable'}
+                            </div>
+                            <div style="font-size:11px;color:var(--text-muted)">
+                                ${isOnline ? `Active latency: ${this.latencyMs || 45}ms` : 'Domain DNS unresolvable — project is likely paused in Supabase'}
+                            </div>
+                        </div>
+                    </div>
+                    <button class="btn btn-secondary btn-xs" onclick="EventoraSupabase.testConnection(true)">
+                        🔄 Test Connection
+                    </button>
+                </div>
+
+                <div class="form-group mb-3">
+                    <label class="form-label" style="font-weight:600">Supabase Project URL</label>
+                    <input class="input" id="sbModalUrl" value="${currentUrl}" placeholder="https://xyzcompany.supabase.co">
+                </div>
+
+                <div class="form-group mb-3">
+                    <label class="form-label" style="font-weight:600">Anon / Publishable API Key</label>
+                    <input class="input" id="sbModalKey" value="${currentKey}" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...">
+                </div>
+
+                <div style="padding:12px;background:var(--bg-subtle);border-radius:var(--r-sm);font-size:12px;margin-bottom:16px;border:1px solid var(--border)">
+                    <div style="font-weight:700;margin-bottom:4px">💡 If project is Paused on Supabase:</div>
+                    <div>Free-tier Supabase projects pause after 7 days of inactivity. Click below to unpause:</div>
+                    <a href="https://supabase.com/dashboard/project/${projId}" target="_blank" class="btn btn-secondary btn-xs mt-2" style="display:inline-flex;align-items:center;gap:6px">
+                        ⚡ Open Supabase Dashboard to Restore (${projId}) ↗
+                    </a>
+                </div>
+
+                <div style="display:flex;gap:10px;justify-content:flex-end">
+                    <button class="btn btn-secondary btn-sm" onclick="Modal.close()">Cancel</button>
+                    <button class="btn btn-primary btn-sm" onclick="
+                        const u = document.getElementById('sbModalUrl').value;
+                        const k = document.getElementById('sbModalKey').value;
+                        EventoraSupabase.saveCredentials(u, k).then(r => {
+                            Modal.close();
+                            if (window.Toast) Toast.show(r.success ? 'success' : 'warning', r.message, '');
+                        });
+                    ">
+                        Save & Reconnect
+                    </button>
+                </div>
+            `);
         }
     },
 

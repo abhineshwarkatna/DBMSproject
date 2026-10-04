@@ -106,8 +106,14 @@
     <div class="auth-form-panel">
       <!-- Login Form -->
       <div class="auth-form" id="authLogin" style="display:flex">
-        <div class="auth-form-logo" onclick="App.goAuth('login')">
-          <img src="assets/logo.png" alt="Eventora" style="height:36px;width:auto;object-fit:contain">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+          <div class="auth-form-logo" onclick="App.goAuth('login')" style="margin-bottom:0">
+            <img src="assets/logo.png" alt="Eventora" style="height:34px;width:auto;object-fit:contain">
+          </div>
+          <div id="supabaseStatusPill" class="supabase-status-pill" onclick="EventoraSupabase.openConfigModal()" title="Click to configure backend or unpause Supabase">
+            <span id="supabaseStatusDot" class="status-dot"></span>
+            <span id="supabaseStatusText">Supabase Offline</span>
+          </div>
         </div>
         <h1 class="auth-title">Welcome back</h1>
         <p class="auth-subtitle">Sign in to continue planning your events.</p>
