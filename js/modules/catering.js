@@ -44,8 +44,10 @@ window.CateringModule = (() => {
           <div class="mod-title">🍽️ Catering & Menu</div>
           <div class="mod-subtitle">Plan food and beverage offerings for ${guests} guests</div>
         </div>
-        <div class="mod-actions">
-          <button class="btn btn-primary btn-sm" onclick="CateringModule.openCounterSetup('${evId}')">⚙️ Counter Setup</button>
+        <div class="mod-actions" style="display:flex;gap:8px">
+          <button class="btn btn-secondary btn-sm" onclick="MarketplaceModule.setCategory('Catering');App.switchTab('vendors')">Explore All Caterers</button>
+          <button class="btn btn-primary btn-sm" onclick="MarketplaceModule.openVendorDetails('v-royal-feast')">👑 Book Royal Feast Catering</button>
+          <button class="btn btn-ghost btn-sm" onclick="CateringModule.openCounterSetup('${evId}')">⚙️ Counter Setup</button>
         </div>
       </div>
 

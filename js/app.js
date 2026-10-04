@@ -98,7 +98,7 @@ window.Modal = (() => {
 
 // ── App Router ────────────────────────────────────────────────────────
 window.App = (() => {
-  const views = ['loading', 'auth', 'home', 'wizard', 'dashboard'];
+  const views = ['loading', 'auth', 'home', 'wizard', 'dashboard', 'vendor', 'employee', 'admin'];
   let currentTab = 'overview';
   let _pendingAction  = null; // action to perform after auth
   let _routingBusy    = false; // prevent duplicate routing during OAuth flow
@@ -109,6 +109,7 @@ window.App = (() => {
       if (el) el.classList.toggle('active', v === id);
     });
     window.scrollTo(0, 0);
+    renderRoleBars();
   };
 
   const goHome = () => {
@@ -125,6 +126,60 @@ window.App = (() => {
     else AuthModule.showLogin();
   };
 
+  const goVendor = () => {
+    showView('vendor');
+    EventoraDB.setRole('vendor');
+    setTimeout(() => {
+      if (window.VendorPortalModule) VendorPortalModule.renderPortal();
+    }, 50);
+  };
+
+  const goEmployee = () => {
+    showView('employee');
+    EventoraDB.setRole('employee');
+    setTimeout(() => {
+      if (window.EmployeePortalModule) EmployeePortalModule.renderPortal();
+    }, 50);
+  };
+
+  const goAdmin = () => {
+    showView('admin');
+    EventoraDB.setRole('admin');
+    setTimeout(() => {
+      if (window.AdminPortalModule) AdminPortalModule.renderPortal();
+    }, 50);
+  };
+
+  const switchRole = (role) => {
+    EventoraDB.setRole(role);
+    Toast.show('info', 'Role Switched', `Active ecosystem mode: ${role.toUpperCase()}`);
+    if (role === 'vendor') goVendor();
+    else if (role === 'employee') goEmployee();
+    else if (role === 'admin') goAdmin();
+    else goDashboard();
+  };
+
+  const renderRoleBars = () => {
+    const bars = document.querySelectorAll('.ecosystem-role-bar');
+    const current = EventoraDB.getCurrentRole ? EventoraDB.getCurrentRole() : 'customer';
+    bars.forEach(bar => {
+      bar.innerHTML = `
+        <button class="role-pill-btn ${current === 'customer' ? 'active' : ''}" onclick="App.switchRole('customer')">
+          👤 Customer
+        </button>
+        <button class="role-pill-btn ${current === 'vendor' ? 'active' : ''}" onclick="App.switchRole('vendor')">
+          🍽️ Vendor
+        </button>
+        <button class="role-pill-btn ${current === 'employee' ? 'active' : ''}" onclick="App.switchRole('employee')">
+          👷 Field Staff
+        </button>
+        <button class="role-pill-btn ${current === 'admin' ? 'active' : ''}" onclick="App.switchRole('admin')">
+          🛡️ Admin
+        </button>
+      `;
+    });
+  };
+
   // Redirect to auth if not logged in; store the intended action
   const requireAuth = (action) => {
     if (AuthModule.isLoggedIn()) {
@@ -137,11 +192,16 @@ window.App = (() => {
   };
 
   // Called after successful login — respects pending action (e.g. Create Event)
-  // Debounced to prevent double-call from getSession() + onAuthStateChange
   const afterAuth = () => {
     if (_routingBusy) return;
     _routingBusy = true;
     setTimeout(() => { _routingBusy = false; }, 1500);
+
+    const role = EventoraDB.getCurrentRole();
+    if (role === 'vendor') { goVendor(); return; }
+    if (role === 'employee') { goEmployee(); return; }
+    if (role === 'admin') { goAdmin(); return; }
+
     const action = _pendingAction || 'dashboard';
     _pendingAction = null;
     // Brand-new user with no events → go straight to wizard
@@ -162,6 +222,7 @@ window.App = (() => {
 
   const goDashboard = () => {
     showView('dashboard');
+    EventoraDB.setRole('customer');
     const evId = EventoraDB.getActiveEventId();
     if (!evId) {
       const events = EventoraDB.getAllEvents();
@@ -187,9 +248,9 @@ window.App = (() => {
     }
     if (statusEl) {
       const s = ev.status || 'Planning';
-      const map = { Planning: 'badge-amber', Active: 'badge-red', Completed: 'badge-green' };
+      const map = { Planning: 'badge-amber', Active: 'badge-red', Completed: 'badge-green', Confirmed: 'badge-green' };
       statusEl.className = `badge ${map[s] || 'badge-amber'}`;
-      statusEl.textContent = s === 'Active' ? '🔴 Live' : s === 'Completed' ? '✓ Done' : '⏳ Planning';
+      statusEl.textContent = s === 'Active' ? '🔴 Live' : s === 'Completed' ? '✓ Done' : s === 'Confirmed' ? '✓ Confirmed' : '⏳ Planning';
     }
     // Update nav badges
     const guests = EventoraDB.getGuests(evId);
@@ -213,31 +274,35 @@ window.App = (() => {
     // Update topbar
     const titles = {
       overview:'Overview', guests:'Guests', budget:'Budget',
-      vendors:'Vendors', tasks:'Tasks', venue:'Venue',
-      schedule:'Schedule', catering:'Catering', transport:'Transport',
+      vendors:'Marketplace & Services', tasks:'Tasks', venue:'Venue Designer',
+      schedule:'Schedule', catering:'Catering Experience', transport:'Transport',
       accommodation:'Accommodation', invitations:'Invitations', media:'Media',
-      live:'🔴 Live', analytics:'Analytics'
+      live:'🔴 Event Control Center', analytics:'Analytics'
     };
     const subs = {
-      overview:'Your event at a glance', guests:'Manage all guests',
-      budget:'Track spending', vendors:'Book service providers',
-      tasks:'What needs to get done', venue:'Design your space',
-      schedule:'Event timeline', catering:'Food & beverages',
-      transport:'Fleet & routes', accommodation:'Room assignments',
+      overview:'Your event command center', guests:'Manage all guests',
+      budget:'Track spending & payments', vendors:'Discover & book verified vendors',
+      tasks:'What needs to get done', venue:'Design your 3D event space',
+      schedule:'Event timeline & run of show', catering:'Curate menus & banquets',
+      transport:'Fleet & VIP guest routes', accommodation:'Room assignments',
       invitations:'Design & send invites', media:'Photos & documents',
-      live:'Real-time event management', analytics:'Performance'
+      live:'Real-time operations & staff tracker', analytics:'Budget & performance metrics'
     };
     const t = document.getElementById('topbarTitle');
     const s = document.getElementById('topbarSub');
     if (t) t.textContent = titles[tabId] || tabId;
     if (s) s.textContent = subs[tabId] || '';
+
     // Render the active module
     const evId = EventoraDB.getActiveEventId();
     const moduleMap = {
       overview:   () => DashboardModule.render(evId),
       guests:     () => GuestsModule.render(evId),
       budget:     () => BudgetModule.render(evId),
-      vendors:    () => VendorsModule.render(evId),
+      vendors:    () => {
+        if (window.MarketplaceModule) MarketplaceModule.renderMarketplace('tab-vendors');
+        else VendorsModule.render(evId);
+      },
       tasks:      () => TasksModule.render(evId),
       venue:      () => VenueModule.render(evId),
       schedule:   () => ScheduleModule.render(evId),
@@ -246,7 +311,10 @@ window.App = (() => {
       accommodation: () => AccommodationModule.render(evId),
       invitations:() => InvitationsModule.render(evId),
       media:      () => MediaModule.render(evId),
-      live:       () => LiveModule.render(evId),
+      live:       () => {
+        if (window.EventControlModule) EventControlModule.render(evId);
+        else LiveModule.render(evId);
+      },
       analytics:  () => AnalyticsModule.render(evId),
     };
     if (moduleMap[tabId]) moduleMap[tabId]();
@@ -369,6 +437,7 @@ window.App = (() => {
 
   return {
     goHome, goWizard, goDashboard, goAuth, requireAuth, afterAuth,
+    goVendor, goEmployee, goAdmin, switchRole, renderRoleBars,
     switchTab, toggleSidebar, closeSidebar,
     scrollTo, openEventSwitcher, setActiveEvent, refreshSidebarEvent,
     refreshSidebar: refreshSidebarEvent,

@@ -1,57 +1,61 @@
 /* =====================================================================
-   EVENTORA 3.0 — Premium Light Design System
-   "Every event. Your way."
+   EVENTORA — Luxury Event Management & Marketplace Platform
+   Inspired by Palmo / Editorial Luxury Standard
+   "Plan any event. Your way."
    ===================================================================== */
 
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,600;0,700;1,400;1,600&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 /* ── Design Tokens ──────────────────────────────────────────────────── */
 :root {
-  /* Brand */
-  --brand:          #7C3AED;
-  --brand-dark:     #5B21B6;
-  --brand-light:    #EDE9FE;
-  --brand-mid:      #DDD6FE;
-  --accent:         #F59E0B;
+  /* Brand & Editorial Palette */
+  --brand:          #18181B; /* Obsidian Primary */
+  --brand-violet:   #6366F1;
+  --brand-dark:     #09090B;
+  --brand-light:    #F4F4F5;
+  --brand-mid:      #E4E4E7;
+  --accent:         #D97706; /* Warm Amber */
+  --accent-gold:    #C28E3A;
   --accent-light:   #FEF3C7;
 
   /* Semantic Colors */
-  --success:        #10B981;
-  --success-bg:     #D1FAE5;
-  --warning:        #F59E0B;
-  --warning-bg:     #FEF3C7;
-  --danger:         #EF4444;
-  --danger-bg:      #FEE2E2;
-  --info:           #3B82F6;
-  --info-bg:        #DBEAFE;
+  --success:        #059669;
+  --success-bg:     #ECFDF5;
+  --warning:        #D97706;
+  --warning-bg:     #FFFBEB;
+  --danger:         #DC2626;
+  --danger-bg:      #FEF2F2;
+  --info:           #2563EB;
+  --info-bg:        #EFF6FF;
 
-  /* Surfaces */
-  --bg-base:        #F8F7F4;
+  /* Surfaces: Palmo Natural Warm Alabaster & Oat */
+  --bg-base:        #FAF8F5; /* Warm limestone canvas */
   --bg-white:       #FFFFFF;
-  --bg-subtle:      #F3F4F6;
-  --bg-muted:       #E9EAEC;
+  --bg-subtle:      #F5F2EB; /* Soft oat tint */
+  --bg-muted:       #EAE5DC;
+  --bg-dark:        #121215;
 
   /* Text */
-  --text-primary:   #111827;
-  --text-secondary: #374151;
-  --text-muted:     #6B7280;
-  --text-subtle:    #9CA3AF;
-  --text-placeholder:#C4C9D4;
+  --text-primary:   #1C1917; /* Deep Charcoal */
+  --text-secondary: #44403C;
+  --text-muted:     #78716C;
+  --text-subtle:    #A8A29E;
+  --text-placeholder:#D6D3D1;
   --text-inverse:   #FFFFFF;
 
-  /* Borders */
-  --border:         #E5E7EB;
-  --border-md:      #D1D5DB;
-  --border-strong:  #9CA3AF;
-  --border-brand:   rgba(124,58,237,0.35);
+  /* Borders: Hairline stone */
+  --border:         #EBE6DF;
+  --border-md:      #DCD5CA;
+  --border-strong:  #A8A29E;
+  --border-brand:   rgba(24,24,27,0.15);
 
-  /* Shadows */
-  --shadow-xs:      0 1px 2px rgba(0,0,0,0.05);
-  --shadow-sm:      0 2px 8px rgba(0,0,0,0.06);
-  --shadow-md:      0 4px 16px rgba(0,0,0,0.08);
-  --shadow-lg:      0 8px 32px rgba(0,0,0,0.10);
-  --shadow-xl:      0 16px 48px rgba(0,0,0,0.12);
-  --shadow-brand:   0 4px 24px rgba(124,58,237,0.25);
+  /* Shadows: Silky soft ambient */
+  --shadow-xs:      0 1px 2px rgba(28,25,23,0.03);
+  --shadow-sm:      0 2px 8px rgba(28,25,23,0.04);
+  --shadow-md:      0 8px 24px rgba(28,25,23,0.06);
+  --shadow-lg:      0 16px 40px rgba(28,25,23,0.08);
+  --shadow-xl:      0 24px 64px rgba(28,25,23,0.10);
+  --shadow-brand:   0 8px 24px rgba(24,24,27,0.18);
 
   /* Radius */
   --r-xs:  4px;

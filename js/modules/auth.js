@@ -60,15 +60,19 @@ window.AuthModule = (() => {
     if (!client) return null;
 
     const meta = user.user_metadata || {};
+    const role = meta.role || user.app_metadata?.role || 'customer';
+    EventoraDB.setRole(role);
+
     const profileData = {
       id:         user.id,
       full_name:  meta.full_name || meta.name || user.email?.split('@')[0] || '',
       email:      user.email || '',
+      role:       role,
       avatar_url: meta.avatar_url || meta.picture || '',
       updated_at: new Date().toISOString(),
     };
 
-    console.log('[Eventora] Syncing profile:', profileData.email);
+    console.log('[Eventora] Syncing profile with role:', profileData.email, role);
 
     const { data, error } = await client
       .from('profiles')
@@ -78,10 +82,10 @@ window.AuthModule = (() => {
 
     if (error) {
       console.warn('[Eventora] Profile sync warning:', error.message,
-        '\n→ Run data/rls_migration.sql in Supabase SQL Editor to create profiles table');
+        '\n→ Run data/eventora_ecosystem_migration.sql in Supabase SQL Editor');
     } else {
       _profile = data;
-      console.log('[Eventora] Profile synced ✓', data.email);
+      console.log('[Eventora] Profile synced ✓', data.email, data.role);
     }
     return data || null;
   };
@@ -270,13 +274,14 @@ window.AuthModule = (() => {
     if (password.length < 6) { _showError(errEl, 'Password must be at least 6 characters.'); return; }
     if (password !== confirm) { _showError(errEl, 'Passwords do not match.'); return; }
 
+    const role     = document.getElementById('signupRole')?.value || 'customer';
     _setLoading(btn, 'Creating account…');
 
     const { data, error } = await sb().auth.signUp({
       email,
       password,
       options: {
-        data: { full_name: name },
+        data: { full_name: name, role: role },
         emailRedirectTo: window.location.origin + '/'
       }
     });

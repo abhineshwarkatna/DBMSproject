@@ -66,9 +66,9 @@ window.PaymentsModule = {
             <div class="invoice-card">
                 <div class="invoice-header">
                     <div>
-                        <h2 style="font-family: var(--font-heading); color: var(--primary); font-size: 24px; font-weight: 800;">EVENTORA</h2>
-                        <p style="font-size: 12px; color: #64748b;">Plan Smart. Celebrate Smarter.</p>
-                        <p style="font-size: 11px; color: #94a3b8; margin-top: 4px;">DBMS Project | Team Abhineshwar</p>
+                        <h2 style="font-family: var(--font-heading); color: var(--brand, #7c3aed); font-size: 24px; font-weight: 800;">EVENTORA</h2>
+                        <p style="font-size: 12px; color: #64748b;">Plan any event. Your way.</p>
+                        <p style="font-size: 11px; color: #10b981; margin-top: 4px; font-weight: 600;">✓ Verified Platform Settlement</p>
                     </div>
                     <div style="text-align: right;">
                         <h3 style="font-size: 16px; color: #0f172a;">PAYMENT RECEIPT</h3>
@@ -108,7 +108,7 @@ window.PaymentsModule = {
                 </div>
 
                 <div style="margin-top: 30px; border-top: 1px dashed #cbd5e1; padding-top: 12px; font-size: 11px; color: #94a3b8; text-align: center;">
-                    This is a system-generated cryptographic receipt issued by the Eventora DBMS Platform.
+                    This is an official system-generated payment receipt issued by Eventora Technologies Platform.
                 </div>
             </div>
         `;

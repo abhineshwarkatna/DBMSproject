@@ -111,24 +111,18 @@ window.InteractiveFx = {
             // Core Navigation
             { title: 'Executive Overview', group: 'Navigation', icon: '📊', action: () => App.switchTab('overview') },
             { title: 'Event Planning & Scheduling', group: 'Navigation', icon: '📅', action: () => App.switchTab('events') },
-            { title: 'Vendor Directory & Marketplace', group: 'Navigation', icon: '🤝', action: () => App.switchTab('vendors') },
-            { title: 'Guest Management & RSVP', group: 'Navigation', icon: '👥', action: () => App.switchTab('guests') },
-            { title: 'Budget & Expense Ledger', group: 'Navigation', icon: '💰', action: () => App.switchTab('budget') },
-            { title: 'Payments & Receipts Gateway', group: 'Navigation', icon: '💳', action: () => App.switchTab('payments') },
-            { title: 'Interactive DBMS Studio & Live SQL', group: 'Navigation', icon: '⚡', action: () => App.switchTab('dbms-studio') },
-            { title: 'System Health & Relational Integrity', group: 'Navigation', icon: '🛡️', action: () => App.switchTab('admin') },
+            { title: 'Services & Catering Marketplace', group: 'Navigation', icon: '🍽️', action: () => { App.goDashboard(); App.switchTab('vendors'); } },
+            { title: 'Vendor Partner Portal', group: 'Portals', icon: '🤝', action: () => App.goVendor() },
+            { title: 'Field Staff Operations Dispatch', group: 'Portals', icon: '👷', action: () => App.goEmployee() },
+            { title: 'Platform Command Center (Admin)', group: 'Portals', icon: '🛡️', action: () => App.goAdmin() },
+            { title: 'Live Event Control & Timeline', group: 'Navigation', icon: '🔴', action: () => { App.goDashboard(); App.switchTab('live'); } },
 
             // Quick Actions
-            { title: 'Toggle Sidebar Navigation (Hide/Show) [Ctrl+B]', group: 'Actions', icon: '◨', action: () => App.toggleSidebar() },
-            { title: 'Create New Event', group: 'Actions', icon: '➕', action: () => App.openModal('modalCreateEvent') },
-            { title: 'Add Guest to Guestlist', group: 'Actions', icon: '➕', action: () => App.openModal('modalAddGuest') },
-            { title: 'Log Itemized Expense', group: 'Actions', icon: '➕', action: () => App.openModal('modalAddExpense') },
-            { title: 'Download eventora_schema.sql', group: 'Actions', icon: '📥', action: () => DbmsStudioModule.exportSQLFile() },
-
-            // SQL Presets
-            { title: 'Run Query: Budget Variance (JOIN & SUM)', group: 'Live SQL', icon: '⚡', action: () => { App.switchTab('dbms-studio'); DbmsStudioModule.loadPreset('budgetVariance'); } },
-            { title: 'Run Query: Confirmed Bookings (3-Table JOIN)', group: 'Live SQL', icon: '⚡', action: () => { App.switchTab('dbms-studio'); DbmsStudioModule.loadPreset('confirmedBookings'); } },
-            { title: 'Run Query: RSVP Attendance Statistics', group: 'Live SQL', icon: '⚡', action: () => { App.switchTab('dbms-studio'); DbmsStudioModule.loadPreset('rsvpStats'); } },
+            { title: 'Toggle Sidebar Navigation [Ctrl+B]', group: 'Actions', icon: '◨', action: () => App.toggleSidebar() },
+            { title: 'Create New Event Wizard', group: 'Actions', icon: '➕', action: () => App.goWizard() },
+            { title: 'Browse Royal Feast Catering', group: 'Marketplace', icon: '👑', action: () => { App.goDashboard(); MarketplaceModule.openVendorDetails('v-royal-feast'); } },
+            { title: 'Add Guest to Guestlist', group: 'Actions', icon: '👥', action: () => App.switchTab('guests') },
+            { title: 'Log Itemized Expense', group: 'Actions', icon: '💰', action: () => App.switchTab('budget') },
 
             // Active Events
             ...db.getEvents().map(e => ({
