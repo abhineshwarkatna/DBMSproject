@@ -441,11 +441,11 @@ window.AuthModule = (() => {
   const googleLogin = async () => {
     const client = sb();
 
-    // If Supabase cloud is confirmed online, initiate implicit Google OAuth
-    if (client && window.EventoraSupabase?.isConnected) {
+    // Attempt live Supabase Google OAuth
+    if (client) {
       try {
         const redirectTo = window.location.origin + '/';
-        console.log('[Eventora Auth] Starting Google OAuth (implicit flow)');
+        console.log('[Eventora Auth] Starting Google OAuth (implicit flow) to:', redirectTo);
         const { data, error } = await client.auth.signInWithOAuth({
           provider: 'google',
           options: { redirectTo }
@@ -454,13 +454,15 @@ window.AuthModule = (() => {
           window.location.href = data.url;
           return;
         }
+        if (error) {
+          console.warn('[Eventora Auth] Live Google OAuth returned notice:', error.message);
+        }
       } catch (err) {
-        console.warn('[Eventora Auth] Cloud Google OAuth error:', err);
+        console.warn('[Eventora Auth] Live Google OAuth exception:', err);
       }
     }
 
-    // If Supabase cloud is paused or offline, do NOT crash the browser into ERR_NAME_NOT_RESOLVED!
-    // Open Google Account selector modal for instant sign-in
+    // Safe fallback if cloud is disconnected or unreachable
     _showGoogleOneTapModal();
   };
 
