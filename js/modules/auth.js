@@ -507,14 +507,16 @@ window.AuthModule = (() => {
     const confirm  = document.getElementById('signupConfirm')?.value;
     const btn      = document.getElementById('signupBtn');
     const errEl    = document.getElementById('onboardingError') || document.getElementById('signupError');
+    const isGoogleFlow = !!_pendingGoogleUser;
 
     _hideError(errEl);
     if (!name || !email || !password) {
-      showSignup();
-      _showError(document.getElementById('signupError'), 'Please fill in your basic account credentials first.');
+      if (!isGoogleFlow) showSignup();
+      _showError(document.getElementById('signupError') || errEl, 'Please fill in your basic account credentials first.');
       return;
     }
-    if (password !== confirm) {
+    // Skip password match check for Google users (auto-generated internal password)
+    if (!isGoogleFlow && password !== confirm) {
       showSignup();
       _showError(document.getElementById('signupError'), 'Passwords do not match.');
       return;
@@ -523,7 +525,15 @@ window.AuthModule = (() => {
     const role = document.getElementById('signupRole')?.value || 'customer';
 
     // Build role-tailored metadata and auto-register vendor / staff
-    let userMetadata = { full_name: name, name: name, role: role };
+    let userMetadata = {
+      full_name: name,
+      name: name,
+      role: role,
+      ...(isGoogleFlow ? {
+        provider: 'google',
+        avatar_url: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`
+      } : {})
+    };
 
     if (role === 'vendor') {
       const bizName     = document.getElementById('signupBizName')?.value?.trim() || `${name}'s Services`;
@@ -621,7 +631,16 @@ window.AuthModule = (() => {
       loginOffline(email, role, userMetadata);
       Toast.show('success', 'Profile Setup Complete!', `Welcome to Eventora as ${role.toUpperCase()}`);
     } finally {
+      _pendingGoogleUser = null; // Clear Google pending state regardless of outcome
       _setLoading(btn, 'Complete Setup & Launch →', false);
+      // Restore the back button on onboarding form for future email signups
+      const backBtn = document.querySelector('#authOnboarding .auth-back-btn');
+      if (backBtn) {
+        backBtn.textContent = '← Back to Account Details';
+        backBtn.onclick = () => showSignup();
+      }
+      const badge = document.querySelector('#authOnboarding [style*="STEP 2"], #authOnboarding [style*="GOOGLE"]');
+      if (badge && badge.textContent.includes('GOOGLE')) badge.textContent = 'STEP 2 OF 2: PROFILE SETUP';
     }
   };
 
@@ -688,36 +707,77 @@ window.AuthModule = (() => {
     `);
   };
 
+  // Temp store for pending Google user before onboarding completes
+  let _pendingGoogleUser = null;
+
   const confirmGoogleLogin = (email, name) => {
     if (window.Modal) Modal.close();
     const cleanEmail = (email || 'abhineshwar6@gmail.com').trim().toLowerCase();
-    const cleanName = name || cleanEmail.split('@')[0];
+    const cleanName  = name || cleanEmail.split('@')[0];
 
-    const googleUser = {
-      id: 'goog_' + cleanEmail.replace(/[^a-zA-Z0-9]/g, '_'),
-      email: cleanEmail,
-      app_metadata: { provider: 'google', providers: ['google'] },
-      user_metadata: {
-        full_name: cleanName,
-        name: cleanName,
+    // ── Check: Is this an EXISTING Google user with a saved profile?
+    const existing = _getAccountByEmail(cleanEmail);
+    if (existing) {
+      // Old user: continue straight into their saved workspace without onboarding
+      const savedMeta = existing.metadata || {};
+      const savedRole = existing.role || savedMeta.role || 'customer';
+
+      const googleUser = {
+        id: existing.id || ('goog_' + cleanEmail.replace(/[^a-zA-Z0-9]/g, '_')),
         email: cleanEmail,
-        role: 'customer',
-        avatar_url: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(cleanName)}`
+        app_metadata: { provider: 'google', providers: ['google'] },
+        user_metadata: {
+          ...savedMeta,
+          full_name: savedMeta.full_name || cleanName,
+          name:      savedMeta.name || cleanName,
+          email:     cleanEmail,
+          role:      savedRole,
+          avatar_url: savedMeta.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(cleanName)}`
+        }
+      };
+
+      _saveOfflineSession(googleUser);
+      _currentUser = googleUser;
+      EventoraDB.setUser(googleUser.id, savedRole);
+      if (savedRole === 'vendor' && savedMeta.vendorId && window.VendorPortalModule) {
+        VendorPortalModule.setVendor(savedMeta.vendorId);
       }
-    };
-
-    _saveOfflineSession(googleUser);
-    _currentUser = googleUser;
-    EventoraDB.setUser(googleUser.id, 'customer');
-
-    if (EventoraDB.getAllEvents().length === 0) {
-      EventoraDB.seedDemoData();
+      updateNavActions();
+      updateSidebarUser();
+      Toast.show('success', 'Google Sign-In Successful', `Welcome back, ${savedMeta.full_name || cleanName}!`);
+      App.afterAuth();
+      return;
     }
 
-    updateNavActions();
-    updateSidebarUser();
-    Toast.show('success', 'Google Sign-In Successful', `Welcome, ${cleanName}!`);
-    App.afterAuth();
+    // ── NEW Google user: store pending identity and show profile onboarding
+    _pendingGoogleUser = { email: cleanEmail, name: cleanName, provider: 'google' };
+
+    // Pre-fill the hidden Step 1 fields so signup() can read them
+    const nameEl  = document.getElementById('signupName');
+    const emailEl = document.getElementById('signupEmail');
+    const pwdEl   = document.getElementById('signupPassword');
+    const cfmEl   = document.getElementById('signupConfirm');
+    if (nameEl)  nameEl.value  = cleanName;
+    if (emailEl) emailEl.value = cleanEmail;
+    // Generate a deterministic internal password for Google users (never shown)
+    const autoPass = 'goog_' + cleanEmail.replace(/[^a-zA-Z0-9]/g, '') + '_secure';
+    if (pwdEl)  pwdEl.value  = autoPass;
+    if (cfmEl)  cfmEl.value  = autoPass;
+
+    // Update the back button on onboarding form to just close/cancel for Google flow
+    const backBtn = document.querySelector('#authOnboarding .auth-back-btn');
+    if (backBtn) {
+      backBtn.textContent = '← Cancel Google Sign-In';
+      backBtn.onclick = () => { _pendingGoogleUser = null; showLogin(); };
+    }
+
+    // Update badge to reflect Google source
+    const badge = document.querySelector('#authOnboarding [style*="STEP 2"]');
+    if (badge) badge.textContent = 'GOOGLE ACCOUNT — PROFILE SETUP';
+
+    App.goAuth();
+    showOnboarding();
+    Toast.show('info', 'One last step!', `Set up your profile for ${cleanEmail}`);
   };
 
   const confirmGoogleCustom = () => {
