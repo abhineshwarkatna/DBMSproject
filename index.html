@@ -140,6 +140,25 @@
 
         <button class="btn btn-primary btn-full btn-lg" id="loginBtn" onclick="AuthModule.login()">Sign In</button>
 
+        <!-- 1-Click Ecosystem Access (Instant Demo & Offline Preview) -->
+        <div class="auth-role-quick-access">
+          <div class="auth-quick-label">⚡ 1-Click Instant Demo Login:</div>
+          <div class="auth-quick-buttons">
+            <button type="button" class="quick-role-chip" onclick="AuthModule.quickLogin('customer')" title="Login as Host / Event Planner">
+              👤 Customer
+            </button>
+            <button type="button" class="quick-role-chip" onclick="AuthModule.quickLogin('vendor')" title="Login as Verified Catering / Service Vendor">
+              🍽️ Vendor
+            </button>
+            <button type="button" class="quick-role-chip" onclick="AuthModule.quickLogin('employee')" title="Login as Operations Field Staff">
+              👷 Staff
+            </button>
+            <button type="button" class="quick-role-chip" onclick="AuthModule.quickLogin('admin')" title="Login as Platform Super Admin">
+              🛡️ Admin
+            </button>
+          </div>
+        </div>
+
         <div class="auth-switch">
           Don't have an account?
           <span class="auth-switch-link" onclick="AuthModule.showSignup()">Create account</span>
