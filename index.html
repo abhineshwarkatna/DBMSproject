@@ -173,8 +173,14 @@
 
       <!-- Sign Up Form -->
       <div class="auth-form" id="authSignup" style="display:none">
-        <div class="auth-form-logo" onclick="App.goAuth('login')">
-          <img src="assets/logo.png" alt="Eventora" style="height:36px;width:auto;object-fit:contain">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+          <div class="auth-form-logo" onclick="App.goAuth('login')" style="margin-bottom:0">
+            <img src="assets/logo.png" alt="Eventora" style="height:34px;width:auto;object-fit:contain">
+          </div>
+          <div class="supabase-status-pill" onclick="EventoraSupabase.openConfigModal()" title="Click to configure backend or unpause Supabase">
+            <span class="status-dot"></span>
+            <span>Cloud Connected</span>
+          </div>
         </div>
         <h1 class="auth-title">Create account</h1>
         <p class="auth-subtitle">Free forever. Start planning your first event.</p>
@@ -219,6 +225,25 @@
         <div class="auth-error" id="signupError" style="display:none"></div>
 
         <button class="btn btn-primary btn-full btn-lg" id="signupBtn" onclick="AuthModule.signup()">Create Account</button>
+
+        <!-- 1-Click Ecosystem Access (Instant Demo & Offline Preview) -->
+        <div class="auth-role-quick-access">
+          <div class="auth-quick-label">⚡ 1-Click Instant Demo Login:</div>
+          <div class="auth-quick-buttons">
+            <button type="button" class="quick-role-chip" onclick="AuthModule.quickLogin('customer')" title="Login as Host / Event Planner">
+              👤 Customer
+            </button>
+            <button type="button" class="quick-role-chip" onclick="AuthModule.quickLogin('vendor')" title="Login as Verified Catering / Service Vendor">
+              🍽️ Vendor
+            </button>
+            <button type="button" class="quick-role-chip" onclick="AuthModule.quickLogin('employee')" title="Login as Operations Field Staff">
+              👷 Staff
+            </button>
+            <button type="button" class="quick-role-chip" onclick="AuthModule.quickLogin('admin')" title="Login as Platform Super Admin">
+              🛡️ Admin
+            </button>
+          </div>
+        </div>
 
         <div class="auth-switch">
           Already have an account?
