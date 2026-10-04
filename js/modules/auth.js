@@ -178,6 +178,77 @@ window.AuthModule = (() => {
     }
   };
 
+  // ── Shared: route or onboard a Supabase-authenticated user ───────────
+  // Called from every SIGNED_IN path (state listener, hash token, getSession).
+  // Detects brand-new users and shows onboarding instead of routing them directly.
+  const _handleSignedInUser = async (user, { syncProfile = true } = {}) => {
+    if (!user) return;
+    _currentUser = user;
+
+    const savedAcct = _getAccountByEmail(user.email);
+    const metaRole  = user.user_metadata?.role;
+    const isNewUser = !savedAcct && !metaRole;  // no local account AND no role in metadata
+
+    if (isNewUser) {
+      // ── BRAND NEW USER → Show profile/category setup (Step 2 onboarding)
+      console.log('[Eventora Auth] New user — showing onboarding:', user.email);
+      const cleanEmail = user.email;
+      const cleanName  = user.user_metadata?.full_name
+                      || user.user_metadata?.name
+                      || cleanEmail.split('@')[0];
+      const provider   = user.app_metadata?.provider || 'email';
+
+      _pendingGoogleUser = { email: cleanEmail, name: cleanName, provider };
+
+      // Pre-fill hidden Step-1 fields so signup() can read them
+      const autoPass = 'oauth_' + cleanEmail.replace(/[^a-zA-Z0-9]/g, '') + '_secure';
+      [['signupName', cleanName], ['signupEmail', cleanEmail],
+       ['signupPassword', autoPass], ['signupConfirm', autoPass]].forEach(([id, val]) => {
+        const el = document.getElementById(id);
+        if (el) el.value = val;
+      });
+
+      EventoraDB.setUser(user.id);
+      updateNavActions();
+      updateSidebarUser();
+      _cleanHash();
+
+      // Cosmetic: update badge & back button for OAuth context
+      const backBtn = document.querySelector('#authOnboarding .auth-back-btn');
+      if (backBtn) {
+        backBtn.textContent = '← Cancel Sign-In';
+        backBtn.onclick = () => { _pendingGoogleUser = null; logout(); };
+      }
+      const badge = document.querySelector('#authOnboarding [style*="STEP 2"]');
+      if (badge) badge.textContent = 'ACCOUNT SETUP — CHOOSE YOUR ROLE';
+
+      App.goAuth();
+      // Delay showOnboarding slightly to let App.goAuth() render the auth panel
+      setTimeout(() => {
+        const onbEl = document.getElementById('authOnboarding');
+        const signEl = document.getElementById('authSignup');
+        const loginEl = document.getElementById('authLogin');
+        if (loginEl) loginEl.style.display = 'none';
+        if (signEl)  signEl.style.display  = 'none';
+        if (onbEl)   onbEl.style.display   = 'flex';
+      }, 80);
+
+      Toast.show('info', 'One last step!',
+        `Welcome ${cleanName}! Pick your role to set up your workspace.`);
+      return;
+    }
+
+    // ── RETURNING / EXISTING USER → sync and route normally
+    console.log('[Eventora Auth] Existing user signed in:', user.email, '| role:', metaRole || savedAcct?.role);
+    const resolvedRole = metaRole || savedAcct?.role || 'customer';
+    EventoraDB.setUser(user.id, resolvedRole);
+    if (syncProfile) { try { await _syncProfile(user); } catch (e) { console.warn(e); } }
+    updateNavActions();
+    updateSidebarUser();
+    _cleanHash();
+    App.afterAuth();
+  };
+
   // ── Persistent auth state listener ────────────────────────────────────
   const _initStateListener = () => {
     if (_listenerActive) return;
@@ -194,13 +265,7 @@ window.AuthModule = (() => {
           const user = session?.user ?? null;
 
           if (event === 'SIGNED_IN' && user) {
-            _currentUser = user;
-            EventoraDB.setUser(user.id);
-            try { await _syncProfile(user); } catch (e) { console.warn(e); }
-            updateNavActions();
-            updateSidebarUser();
-            _cleanHash();
-            App.afterAuth();
+            await _handleSignedInUser(user);
           }
 
           if (event === 'SIGNED_OUT') {
@@ -269,14 +334,8 @@ window.AuthModule = (() => {
 
         if (!error && data?.session?.user) {
           const user = data.session.user;
-          _currentUser = user;
-          EventoraDB.setUser(user.id);
-          try { await _syncProfile(user); } catch (e) { console.warn(e); }
-          updateNavActions();
-          updateSidebarUser();
-          _cleanHash();
           console.log('[Eventora Auth] Cloud session restored ✓ for:', user.email);
-          App.afterAuth();
+          await _handleSignedInUser(user);
           return;
         }
       } catch (err) {
@@ -292,13 +351,7 @@ window.AuthModule = (() => {
         try {
           const { data: { session: s2 } } = await client.auth.getSession();
           if (s2?.user) {
-            _currentUser = s2.user;
-            EventoraDB.setUser(s2.user.id);
-            try { await _syncProfile(s2.user); } catch (e) {}
-            updateNavActions();
-            updateSidebarUser();
-            _cleanHash();
-            App.afterAuth();
+            await _handleSignedInUser(s2.user);
             return;
           }
         } catch (e) {}
