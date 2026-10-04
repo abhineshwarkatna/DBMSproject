@@ -28,6 +28,68 @@ window.AuthModule = (() => {
     return metaRole || appRole || profRole || dbRole || 'customer';
   };
 
+  // ── Registered Accounts Directory (Offline / Local persistence) ──────
+  const INITIAL_ACCOUNTS = {
+    'customer@eventora.com': {
+      email: 'customer@eventora.com',
+      role: 'customer',
+      metadata: { full_name: 'Aditya Verma', name: 'Aditya Verma', role: 'customer' }
+    },
+    'vendor@eventora.com': {
+      email: 'vendor@eventora.com',
+      role: 'vendor',
+      metadata: { full_name: 'Chef Ranveer', name: 'Chef Ranveer', role: 'vendor', vendorId: 'v-royal-feast', businessName: 'Royal Feast Catering', category: 'Catering', city: 'Hyderabad' }
+    },
+    'photo@eventora.com': {
+      email: 'photo@eventora.com',
+      role: 'vendor',
+      metadata: { full_name: 'Arjun Lumina', name: 'Arjun Lumina', role: 'vendor', vendorId: 'v-lumina-studios', businessName: 'Lumina Cinematic Studios', category: 'Photography', city: 'Cyberabad' }
+    },
+    'venue@eventora.com': {
+      email: 'venue@eventora.com',
+      role: 'vendor',
+      metadata: { full_name: 'Karan Singhania', name: 'Karan Singhania', role: 'vendor', vendorId: 'v-crystal-ballroom', businessName: 'Grand Crystal Ballroom', category: 'Venues', city: 'Secunderabad' }
+    },
+    'staff@eventora.com': {
+      email: 'staff@eventora.com',
+      role: 'employee',
+      metadata: { full_name: 'Rahul Verma', name: 'Rahul Verma', role: 'employee', employeeId: 'emp-1', roleTitle: 'Catering Setup Lead', area: 'Hyderabad Central' }
+    },
+    'admin@eventora.com': {
+      email: 'admin@eventora.com',
+      role: 'admin',
+      metadata: { full_name: 'Platform Super Admin', name: 'Platform Super Admin', role: 'admin' }
+    }
+  };
+
+  const _getAccounts = () => {
+    try {
+      const raw = localStorage.getItem('eventora_registered_accounts');
+      const custom = raw ? JSON.parse(raw) : {};
+      return { ...INITIAL_ACCOUNTS, ...custom };
+    } catch (e) {
+      return INITIAL_ACCOUNTS;
+    }
+  };
+
+  const _saveAccount = (account) => {
+    try {
+      if (!account || !account.email) return;
+      const clean = account.email.toLowerCase().trim();
+      const raw = localStorage.getItem('eventora_registered_accounts');
+      const custom = raw ? JSON.parse(raw) : {};
+      custom[clean] = account;
+      localStorage.setItem('eventora_registered_accounts', JSON.stringify(custom));
+    } catch (e) {}
+  };
+
+  const _getAccountByEmail = (email) => {
+    if (!email) return null;
+    const clean = email.toLowerCase().trim();
+    const accounts = _getAccounts();
+    return accounts[clean] || null;
+  };
+
   // ── Offline / Local Session Storage ───────────────────────────────────
   const _getOfflineSession = () => {
     try {
@@ -267,35 +329,53 @@ window.AuthModule = (() => {
   };
 
   // ── Offline / Demo Authentication ─────────────────────────────────────
-  const loginOffline = (email, role = null) => {
+  const loginOffline = (email, role = null, customMetadata = null) => {
     const cleanEmail = (email || 'customer@eventora.com').trim().toLowerCase();
-    let assignedRole = role;
+    const storedAccount = _getAccountByEmail(cleanEmail);
+
+    let assignedRole = role || storedAccount?.role || storedAccount?.metadata?.role;
     if (!assignedRole) {
-      if (cleanEmail.includes('vendor')) assignedRole = 'vendor';
+      if (cleanEmail.includes('vendor') || cleanEmail.includes('catering') || cleanEmail.includes('photo') || cleanEmail.includes('venue')) assignedRole = 'vendor';
       else if (cleanEmail.includes('staff') || cleanEmail.includes('employee')) assignedRole = 'employee';
       else if (cleanEmail.includes('admin')) assignedRole = 'admin';
       else assignedRole = 'customer';
     }
 
     const nameParts = cleanEmail.split('@')[0].split('.');
-    const displayName = nameParts.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
+    const displayName = (storedAccount?.metadata?.full_name) || nameParts.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
+
+    const metadata = {
+      full_name: displayName || 'Eventora User',
+      name: displayName || 'Eventora User',
+      role: assignedRole,
+      ...(storedAccount?.metadata || {}),
+      ...(customMetadata || {})
+    };
 
     const offlineUser = {
-      id: 'usr_' + cleanEmail.replace(/[^a-zA-Z0-9]/g, '_'),
+      id: storedAccount?.id || ('usr_' + cleanEmail.replace(/[^a-zA-Z0-9]/g, '_')),
       email: cleanEmail,
-      user_metadata: {
-        full_name: displayName || 'Eventora User',
-        name: displayName || 'Eventora User',
-        role: assignedRole
-      }
+      user_metadata: metadata
     };
+
+    _saveAccount({
+      id: offlineUser.id,
+      email: cleanEmail,
+      role: assignedRole,
+      metadata: metadata
+    });
 
     _saveOfflineSession(offlineUser);
     _currentUser = offlineUser;
     EventoraDB.setUser(offlineUser.id, assignedRole);
 
-    // If new session with 0 events, seed sample ecosystem data
-    if (EventoraDB.getAllEvents().length === 0) {
+    // If vendor and has vendorId, set it in VendorPortalModule
+    if (assignedRole === 'vendor' && metadata.vendorId && window.VendorPortalModule) {
+      VendorPortalModule.setVendor(metadata.vendorId);
+    }
+
+    // If new session with 0 events and role is customer, seed sample ecosystem data
+    if (assignedRole === 'customer' && EventoraDB.getAllEvents().length === 0) {
       EventoraDB.seedDemoData();
     }
 
@@ -313,6 +393,21 @@ window.AuthModule = (() => {
       admin:    'admin@eventora.com'
     };
     loginOffline(roleEmails[role] || 'customer@eventora.com', role);
+  };
+
+  const fillCredentials = (email, pwd = 'password123') => {
+    const emailEl = document.getElementById('loginEmail');
+    const pwdEl = document.getElementById('loginPassword');
+    if (emailEl) emailEl.value = email;
+    if (pwdEl) pwdEl.value = pwd;
+    login();
+  };
+
+  const onSignupRoleChange = (role) => {
+    const vendorBox = document.getElementById('signupVendorFields');
+    const staffBox  = document.getElementById('signupStaffFields');
+    if (vendorBox) vendorBox.style.display = (role === 'vendor') ? 'block' : 'none';
+    if (staffBox)  staffBox.style.display  = (role === 'employee') ? 'block' : 'none';
   };
 
   // ── Email/Password Login ───────────────────────────────────────────────
@@ -386,60 +481,103 @@ window.AuthModule = (() => {
     if (password !== confirm) { _showError(errEl, 'Passwords do not match.'); return; }
 
     const role = document.getElementById('signupRole')?.value || 'customer';
+
+    // Build role-tailored metadata and auto-register vendor / staff
+    let userMetadata = { full_name: name, name: name, role: role };
+
+    if (role === 'vendor') {
+      const bizName     = document.getElementById('signupBizName')?.value?.trim() || `${name}'s Services`;
+      const bizCategory = document.getElementById('signupBizCategory')?.value || 'Catering';
+      const bizCity     = document.getElementById('signupBizCity')?.value?.trim() || 'Hyderabad';
+
+      // Register new vendor in Eventora catalog
+      const newVendor = EventoraDB.registerVendor({
+        name: bizName,
+        category: bizCategory,
+        city: bizCity,
+        email: email,
+        contactName: name,
+        phone: '+91 98765 00000',
+        desc: `Verified ${bizCategory} merchant on Eventora.`,
+        packages: [
+          {
+            id: 'pkg-core',
+            name: `Standard ${bizCategory} Service`,
+            price: bizCategory === 'Catering' ? 599 : (bizCategory === 'Venues' ? 85000 : 25000),
+            priceType: bizCategory === 'Catering' ? 'per person' : 'package',
+            description: `Full end-to-end ${bizCategory} package managed by ${bizName}.`,
+            starters: ['Initial Consultation', 'Live Site Inspection'],
+            mains: ['Full Coordination & Service Execution', 'Quality Assurance & Delivery']
+          }
+        ]
+      });
+
+      userMetadata.vendorId     = newVendor.id;
+      userMetadata.businessName = bizName;
+      userMetadata.category     = bizCategory;
+      userMetadata.city         = bizCity;
+
+    } else if (role === 'employee') {
+      const staffRole = document.getElementById('signupStaffRole')?.value || 'Catering Setup Lead';
+      const staffArea = document.getElementById('signupStaffArea')?.value?.trim() || 'Hyderabad Central';
+      userMetadata.roleTitle = staffRole;
+      userMetadata.area      = staffArea;
+    }
+
     _setLoading(btn, 'Creating account…');
 
     try {
       const client = sb();
-      if (!client) {
-        loginOffline(email, role);
-        return;
-      }
 
-      const { data, error } = await client.auth.signUp({
-        email,
-        password,
-        options: {
-          data: { full_name: name, role: role },
-          emailRedirectTo: window.location.origin + '/'
+      // If cloud is online, attempt live cloud signup
+      if (client && window.EventoraSupabase?.isConnected) {
+        const { data, error } = await client.auth.signUp({
+          email,
+          password,
+          options: {
+            data: userMetadata,
+            emailRedirectTo: window.location.origin + '/'
+          }
+        });
+
+        if (error) {
+          console.error('[Eventora Auth] signUp cloud notice:', error);
+          if (error.message?.includes('fetch') || error.message?.includes('Network')) {
+            loginOffline(email, role, userMetadata);
+            return;
+          }
+          _showError(errEl, _friendlyError(error));
+          return;
         }
-      });
 
-      if (error) {
-        console.error('[Eventora Auth] signUp error:', error);
-        const friendly = _friendlyError(error);
-        const isNetworkErr = friendly.includes('Network') || (error.message || '').toLowerCase().includes('fetch');
-
-        if (isNetworkErr) {
-          _showError(errEl, `
-            <div style="font-weight:600;margin-bottom:6px">⚠️ Cloud Database Unreachable</div>
-            <div style="font-size:12px;opacity:0.9;margin-bottom:10px">Could not contact cloud database. Create local account instantly:</div>
-            <button type="button" class="btn btn-secondary btn-sm btn-full" onclick="AuthModule.loginOffline('${email}', '${role}')">
-              Create Local Account (${role.toUpperCase()}) →
-            </button>
-          `);
-        } else {
-          _showError(errEl, friendly);
+        if (data?.user) {
+          _currentUser = data.user;
+          _saveAccount({
+            id: data.user.id,
+            email: email,
+            role: role,
+            metadata: userMetadata
+          });
+          EventoraDB.setUser(data.user.id, role);
+          if (role === 'vendor' && userMetadata.vendorId && window.VendorPortalModule) {
+            VendorPortalModule.setVendor(userMetadata.vendorId);
+          }
+          try { await _syncProfile(data.user); } catch (e) {}
+          updateNavActions();
+          updateSidebarUser();
+          Toast.show('success', 'Account Created!', `Welcome to Eventora as ${role.toUpperCase()}`);
+          App.afterAuth();
+          return;
         }
-        return;
       }
 
-      console.log('[Eventora Auth] Signup:', data.user?.email,
-        data.session ? '(auto-confirmed)' : '(email confirmation required)');
+      // If cloud is unreachable, register locally
+      console.log('[Eventora Auth] Registering user locally with role and category:', email, role, userMetadata);
+      loginOffline(email, role, userMetadata);
 
-      if (data?.user && !data.session) {
-        _showEmailSent(email);
-      } else if (data?.user && data?.session) {
-        _currentUser = data.user;
-        EventoraDB.setUser(data.user.id, role);
-        try { await _syncProfile(data.user); } catch (e) { console.warn(e); }
-        updateNavActions();
-        updateSidebarUser();
-        Toast.show('success', 'Account created!', '');
-        App.afterAuth();
-      }
     } catch (err) {
-      console.error('[Eventora Auth] Unexpected signup exception:', err);
-      _showError(errEl, err.message || 'Signup failed. Please try again.');
+      console.warn('[Eventora Auth] Cloud signup notice, saving locally:', err);
+      loginOffline(email, role, userMetadata);
     } finally {
       _setLoading(btn, 'Create Account', false);
     }
@@ -846,7 +984,7 @@ window.AuthModule = (() => {
 
   return {
     init, isLoggedIn, getUser, getProfile, getUserRole, logout,
-    loginOffline, quickLogin, confirmGoogleLogin, confirmGoogleCustom,
+    loginOffline, quickLogin, fillCredentials, onSignupRoleChange, confirmGoogleLogin, confirmGoogleCustom,
     updateNavActions, updateSidebarUser,
     showLogin, showSignup, showForgot, showReset,
     login, signup, googleLogin, sendReset, resetPassword,
