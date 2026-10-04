@@ -104,6 +104,25 @@ window.App = (() => {
   let _routingBusy    = false; // prevent duplicate routing during OAuth flow
 
   const showView = (id) => {
+    const role = (window.AuthModule && AuthModule.getUserRole)
+      ? AuthModule.getUserRole()
+      : (window.EventoraDB && EventoraDB.getCurrentRole ? EventoraDB.getCurrentRole() : 'customer');
+
+    // Role-based route guard
+    if (window.AuthModule && AuthModule.isLoggedIn()) {
+      if (role === 'vendor' && id !== 'vendor' && id !== 'auth' && id !== 'loading') {
+        console.warn(`[Eventora RBAC] Blocked vendor navigation to '${id}'. Preserving vendor portal isolation.`);
+        id = 'vendor';
+      } else if (role === 'employee' && id !== 'employee' && id !== 'auth' && id !== 'loading') {
+        console.warn(`[Eventora RBAC] Blocked staff navigation to '${id}'. Preserving dispatch app isolation.`);
+        id = 'employee';
+      } else if (role === 'customer' && (id === 'vendor' || id === 'employee' || id === 'admin')) {
+        console.warn(`[Eventora RBAC] Blocked customer navigation to '${id}'. Restricted to merchant/staff accounts.`);
+        Toast.show('warning', 'Access Restricted', 'Merchant Partner and Staff portals require a verified partner account.');
+        id = 'dashboard';
+      }
+    }
+
     views.forEach(v => {
       const el = document.getElementById(`view-${v}`);
       if (el) el.classList.toggle('active', v === id);
@@ -115,6 +134,11 @@ window.App = (() => {
   const goHome = () => {
     // If not logged in, home = login page
     if (!AuthModule.isLoggedIn()) { goAuth('login'); return; }
+    const role = (window.AuthModule && AuthModule.getUserRole) ? AuthModule.getUserRole() : EventoraDB.getCurrentRole();
+    if (role === 'vendor') { goVendor(); return; }
+    if (role === 'employee') { goEmployee(); return; }
+    if (role === 'admin') { goAdmin(); return; }
+
     showView('home');
     setTimeout(() => LandingModule.init(), 50);
     setTimeout(() => AuthModule.updateNavActions(), 100);
@@ -151,38 +175,82 @@ window.App = (() => {
   };
 
   const switchRole = (role) => {
+    const currentRole = (window.AuthModule && AuthModule.getUserRole)
+      ? AuthModule.getUserRole()
+      : (window.EventoraDB && EventoraDB.getCurrentRole ? EventoraDB.getCurrentRole() : 'customer');
+
+    // Only platform super admin can inspect different role views
+    if (currentRole !== 'admin') {
+      Toast.show('warning', 'Role Locked', `You are logged in with a ${currentRole.toUpperCase()} account. Sign out to log in with a different role.`);
+      return;
+    }
+
     EventoraDB.setRole(role);
-    Toast.show('info', 'Role Switched', `Active ecosystem mode: ${role.toUpperCase()}`);
-    if (role === 'vendor') goVendor();
-    else if (role === 'employee') goEmployee();
-    else if (role === 'admin') goAdmin();
-    else goDashboard();
+    Toast.show('info', 'Admin Inspection Mode', `Active view: ${role.toUpperCase()}`);
+    if (role === 'vendor') {
+      views.forEach(v => {
+        const el = document.getElementById(`view-${v}`);
+        if (el) el.classList.toggle('active', v === 'vendor');
+      });
+      if (window.VendorPortalModule) VendorPortalModule.renderPortal();
+    } else if (role === 'employee') {
+      views.forEach(v => {
+        const el = document.getElementById(`view-${v}`);
+        if (el) el.classList.toggle('active', v === 'employee');
+      });
+      if (window.EmployeePortalModule) EmployeePortalModule.renderPortal();
+    } else if (role === 'admin') {
+      goAdmin();
+    } else {
+      views.forEach(v => {
+        const el = document.getElementById(`view-${v}`);
+        if (el) el.classList.toggle('active', v === 'dashboard');
+      });
+      refreshSidebarEvent();
+      switchTab('overview');
+    }
   };
 
   const renderRoleBars = () => {
     const bars = document.querySelectorAll('.ecosystem-role-bar');
-    const current = EventoraDB.getCurrentRole ? EventoraDB.getCurrentRole() : 'customer';
+    const role = (window.AuthModule && AuthModule.getUserRole)
+      ? AuthModule.getUserRole()
+      : (EventoraDB.getCurrentRole ? EventoraDB.getCurrentRole() : 'customer');
+
     bars.forEach(bar => {
-      bar.innerHTML = `
-        <button class="role-pill-btn ${current === 'customer' ? 'active' : ''}" onclick="App.switchRole('customer')">
-          👤 Customer
-        </button>
-        <button class="role-pill-btn ${current === 'vendor' ? 'active' : ''}" onclick="App.switchRole('vendor')">
-          🍽️ Vendor
-        </button>
-        <button class="role-pill-btn ${current === 'employee' ? 'active' : ''}" onclick="App.switchRole('employee')">
-          👷 Field Staff
-        </button>
-        <button class="role-pill-btn ${current === 'admin' ? 'active' : ''}" onclick="App.switchRole('admin')">
-          🛡️ Admin
-        </button>
-      `;
+      // ONLY Admin can see the role switcher pill bar!
+      if (role === 'admin') {
+        bar.style.display = 'inline-flex';
+        const currentActive = EventoraDB.getCurrentRole ? EventoraDB.getCurrentRole() : 'admin';
+        bar.innerHTML = `
+          <button class="role-pill-btn ${currentActive === 'customer' ? 'active' : ''}" onclick="App.switchRole('customer')">
+            👤 Customer
+          </button>
+          <button class="role-pill-btn ${currentActive === 'vendor' ? 'active' : ''}" onclick="App.switchRole('vendor')">
+            🍽️ Vendor
+          </button>
+          <button class="role-pill-btn ${currentActive === 'employee' ? 'active' : ''}" onclick="App.switchRole('employee')">
+            👷 Field Staff
+          </button>
+          <button class="role-pill-btn ${currentActive === 'admin' ? 'active' : ''}" onclick="App.switchRole('admin')">
+            🛡️ Admin
+          </button>
+        `;
+      } else {
+        bar.style.display = 'none';
+        bar.innerHTML = '';
+      }
     });
   };
 
   // Redirect to auth if not logged in; store the intended action
   const requireAuth = (action) => {
     if (AuthModule.isLoggedIn()) {
+      const role = (window.AuthModule && AuthModule.getUserRole) ? AuthModule.getUserRole() : EventoraDB.getCurrentRole();
+      if (role === 'vendor') { goVendor(); return; }
+      if (role === 'employee') { goEmployee(); return; }
+      if (role === 'admin') { goAdmin(); return; }
+
       if (action === 'wizard') goWizard();
       else if (action === 'dashboard') goDashboard();
     } else {
@@ -191,13 +259,9 @@ window.App = (() => {
     }
   };
 
-  // Called after successful login — respects pending action (e.g. Create Event)
   const afterAuth = () => {
-    if (_routingBusy) return;
-    _routingBusy = true;
-    setTimeout(() => { _routingBusy = false; }, 1500);
-
-    const role = EventoraDB.getCurrentRole();
+    const role = (window.AuthModule && AuthModule.getUserRole) ? AuthModule.getUserRole() : EventoraDB.getCurrentRole();
+    console.log('[Eventora App] afterAuth routing for role:', role);
     if (role === 'vendor') { goVendor(); return; }
     if (role === 'employee') { goEmployee(); return; }
     if (role === 'admin') { goAdmin(); return; }
@@ -215,14 +279,28 @@ window.App = (() => {
   };
 
   const goWizard = (categoryPreset) => {
+    const role = (window.AuthModule && AuthModule.getUserRole) ? AuthModule.getUserRole() : EventoraDB.getCurrentRole();
+    if (role === 'vendor') {
+      Toast.show('warning', 'Access Restricted', 'Vendors manage their services and bookings from the Merchant Portal.');
+      goVendor();
+      return;
+    }
+    if (role === 'employee') {
+      goEmployee();
+      return;
+    }
     showView('wizard');
     WizardModule.reset();
     if (categoryPreset) WizardModule.preselectCategory(categoryPreset);
   };
 
   const goDashboard = () => {
+    const role = (window.AuthModule && AuthModule.getUserRole) ? AuthModule.getUserRole() : EventoraDB.getCurrentRole();
+    if (role === 'vendor') { goVendor(); return; }
+    if (role === 'employee') { goEmployee(); return; }
+    if (role === 'admin') { goAdmin(); return; }
+
     showView('dashboard');
-    EventoraDB.setRole('customer');
     const evId = EventoraDB.getActiveEventId();
     if (!evId) {
       const events = EventoraDB.getAllEvents();
@@ -437,7 +515,7 @@ window.App = (() => {
 
   return {
     goHome, goWizard, goDashboard, goAuth, requireAuth, afterAuth,
-    goVendor, goEmployee, goAdmin, switchRole, renderRoleBars,
+    goVendor, goEmployee, goAdmin, switchRole, renderRoleBars, showView,
     switchTab, toggleSidebar, closeSidebar,
     scrollTo, openEventSwitcher, setActiveEvent, refreshSidebarEvent,
     refreshSidebar: refreshSidebarEvent,

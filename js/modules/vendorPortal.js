@@ -17,11 +17,27 @@ window.VendorPortalModule = (() => {
     renderPortal();
   };
 
+  const resolveActiveVendor = () => {
+    const user = window.AuthModule ? AuthModule.getUser() : null;
+    const userEmail = (user?.email || '').toLowerCase();
+    const catalog = EventoraDB.getVendorCatalog();
+
+    if (user?.user_metadata?.vendorId) {
+      const v = EventoraDB.getVendorById(user.user_metadata.vendorId);
+      if (v) return v;
+    }
+    if (userEmail) {
+      const matched = catalog.find(v => (v.email || '').toLowerCase() === userEmail);
+      if (matched) return matched;
+    }
+    return EventoraDB.getVendorById(_activeVendorId) || catalog[0];
+  };
+
   const renderPortal = (containerId = 'vendorPortalContainer') => {
     const container = document.getElementById(containerId);
     if (!container) return;
 
-    const vendor = EventoraDB.getVendorById(_activeVendorId) || EventoraDB.getVendorCatalog()[0];
+    const vendor = resolveActiveVendor();
     const allBookings = EventoraDB.getBookingsForVendor(vendor.id);
     const pendingBookings = allBookings.filter(b => b.status === EventoraDB.BOOKING_STATUS.REQUESTED || b.status === EventoraDB.BOOKING_STATUS.PENDING_VENDOR);
     const activeBookings = allBookings.filter(b => b.status === EventoraDB.BOOKING_STATUS.ACCEPTED || b.status === EventoraDB.BOOKING_STATUS.CONFIRMED || b.status === EventoraDB.BOOKING_STATUS.IN_PROGRESS);
@@ -33,6 +49,12 @@ window.VendorPortalModule = (() => {
     const netPayout = grossRevenue - platformCommission;
 
     const reviews = EventoraDB.getReviewsForVendor(vendor.id);
+
+    // Update topbar identity
+    const navBizName = document.getElementById('vendorNavBusinessName');
+    if (navBizName) navBizName.textContent = vendor.name;
+    const navEmail = document.getElementById('vendorNavUserEmail');
+    if (navEmail) navEmail.textContent = `${vendor.category} Specialist · ${vendor.city}`;
 
     container.innerHTML = `
       <div class="vendor-portal-wrap">
@@ -54,14 +76,24 @@ window.VendorPortalModule = (() => {
               </div>
             </div>
 
-            <!-- Vendor Switcher (for demo/testing multi-partner workflow) -->
-            <div style="display:flex;align-items:center;gap:12px">
-              <span style="font-size:12px;font-weight:700;color:var(--text-muted)">SWITCH VENDOR:</span>
-              <select class="input input-sm" style="font-weight:700" onchange="VendorPortalModule.setVendor(this.value)">
-                ${EventoraDB.getVendorCatalog().map(v => `
-                  <option value="${v.id}" ${v.id === vendor.id ? 'selected' : ''}>${v.name} (${v.category})</option>
-                `).join('')}
-              </select>
+            <!-- Verified Category & Storefront Status -->
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <span class="badge badge-purple" style="font-size:12px;font-weight:700;padding:5px 12px">
+                🏷️ Category: ${vendor.category}
+              </span>
+              <span class="badge badge-green" style="font-size:12px;font-weight:700;padding:5px 12px">
+                ● Storefront Online
+              </span>
+              ${(window.AuthModule && AuthModule.getUserRole() === 'admin') ? `
+              <div style="display:flex;align-items:center;gap:6px;background:var(--bg-subtle);padding:4px 8px;border-radius:var(--r-md);border:1px solid var(--border)">
+                <span style="font-size:10px;font-weight:800;color:var(--brand)">ADMIN SWITCH:</span>
+                <select class="input input-sm" style="font-weight:600;font-size:11px" onchange="VendorPortalModule.setVendor(this.value)">
+                  ${EventoraDB.getVendorCatalog().map(v => `
+                    <option value="${v.id}" ${v.id === vendor.id ? 'selected' : ''}>${v.name} (${v.category})</option>
+                  `).join('')}
+                </select>
+              </div>
+              ` : ''}
             </div>
           </div>
         </div>
