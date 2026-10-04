@@ -463,6 +463,22 @@ window.AuthModule = (() => {
     if (staffBox)  staffBox.style.display  = (role === 'employee') ? 'block' : 'none';
   };
 
+  // Called by role card clicks on the unified signup form
+  const selectRole = (role, cardEl) => {
+    // Update visual state
+    document.querySelectorAll('.role-card').forEach(c => c.classList.remove('role-card--active'));
+    if (cardEl) cardEl.classList.add('role-card--active');
+
+    // Sync hidden <select> so signup() reads the right role
+    const sel = document.getElementById('signupRole');
+    if (sel) {
+      sel.value = role;
+      // Also trigger the change handler to show/hide vendor/staff fields
+      onSignupRoleChange(role);
+    }
+  };
+
+
   // ── Email/Password Login ───────────────────────────────────────────────
   const login = async () => {
     const email    = document.getElementById('loginEmail')?.value?.trim();
@@ -1164,7 +1180,8 @@ window.AuthModule = (() => {
 
   return {
     init, isLoggedIn, getUser, getProfile, getUserRole, logout,
-    loginOffline, quickLogin, fillCredentials, onSignupRoleChange, confirmGoogleLogin, confirmGoogleCustom,
+    loginOffline, quickLogin, fillCredentials, onSignupRoleChange, selectRole,
+    confirmGoogleLogin, confirmGoogleCustom,
     updateNavActions, updateSidebarUser,
     showLogin, showSignup, showOnboarding, startOnboarding, showForgot, showReset,
     showLoginWithEmail, showSignupWithEmail,
