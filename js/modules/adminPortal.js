@@ -196,31 +196,44 @@ window.AdminPortalModule = (() => {
                 </tr>
               </thead>
               <tbody>
-                ${vendors.map(v => `
-                  <tr>
-                    <td>
-                      <strong>${v.name}</strong>
-                      <div style="font-size:11px;color:var(--text-muted)">${v.email || 'partner@eventora.io'}</div>
-                    </td>
-                    <td><span class="badge badge-gray">${v.category}</span></td>
-                    <td>${v.city}</td>
-                    <td>⭐ <strong>${v.rating}</strong> (${v.reviewCount})</td>
-                    <td>
-                      <span class="badge ${v.verificationStatus === 'Verified' ? 'badge-green' : v.verificationStatus === 'Rejected' ? 'badge-red' : 'badge-amber'}">
-                        ${v.verificationStatus || 'Verified'}
-                      </span>
-                    </td>
-                    <td>
-                      <div style="display:flex;gap:6px">
-                        ${v.verificationStatus !== 'Verified' ? `
-                          <button class="btn btn-primary btn-xs" onclick="AdminPortalModule.updateVendorStatus('${v.id}','Verified')">Approve</button>
-                        ` : `
-                          <button class="btn btn-secondary btn-xs" onclick="AdminPortalModule.updateVendorStatus('${v.id}','Suspended')">Suspend</button>
-                        `}
-                      </div>
-                    </td>
-                  </tr>
-                `).join('')}
+                ${vendors.map(v => {
+                  const vName = v.business_name || v.name;
+                  const vCat = v.service_category || v.category || 'Catering';
+                  const vCity = v.location || v.city || 'Hyderabad';
+                  const vId = v.vendor_id ? String(v.vendor_id) : v.id;
+                  const isVerified = (v.verificationStatus === 'Verified' || v.verification_status === 'Verified' || v.is_verified === true || v.verified === true);
+                  const isRejected = (v.verificationStatus === 'Rejected' || v.verification_status === 'Rejected');
+                  const isSuspended = (v.verificationStatus === 'Suspended' || v.verification_status === 'Suspended');
+                  const statusLabel = isVerified ? 'Verified' : isRejected ? 'Rejected' : isSuspended ? 'Suspended' : 'Pending Verification';
+                  const badgeClass = isVerified ? 'badge-green' : (isRejected || isSuspended) ? 'badge-red' : 'badge-amber';
+
+                  return `
+                    <tr>
+                      <td>
+                        <strong>${vName}</strong>
+                        <div style="font-size:11px;color:var(--text-muted)">${v.email || 'partner@eventora.io'} · ID: ${vId}</div>
+                      </td>
+                      <td><span class="badge badge-gray">${vCat}</span></td>
+                      <td>${vCity}</td>
+                      <td>⭐ <strong>${Number(v.rating || 5.0).toFixed(1)}</strong> (${v.reviewCount || v.review_count || 0})</td>
+                      <td>
+                        <span class="badge ${badgeClass}">
+                          ${statusLabel}
+                        </span>
+                      </td>
+                      <td>
+                        <div style="display:flex;gap:6px">
+                          ${!isVerified ? `
+                            <button class="btn btn-primary btn-xs" onclick="AdminPortalModule.approveVendorLive('${vId}')">Approve</button>
+                            <button class="btn btn-secondary btn-xs" style="color:var(--danger)" onclick="AdminPortalModule.rejectVendorLive('${vId}')">Reject</button>
+                          ` : `
+                            <button class="btn btn-secondary btn-xs" onclick="AdminPortalModule.suspendVendorLive('${vId}')">Suspend</button>
+                          `}
+                        </div>
+                      </td>
+                    </tr>
+                  `;
+                }).join('')}
               </tbody>
             </table>
           </div>
@@ -345,6 +358,21 @@ window.AdminPortalModule = (() => {
     }, 'Confirm Rejection');
   };
 
+  const suspendVendorLive = async (vendorId) => {
+    try {
+      if (window.LiveMarketplace && window.EventoraSupabase?.isConnected) {
+        await LiveMarketplace.adminSuspendVendor(Number(vendorId) || vendorId);
+        Toast.show('warning', 'Vendor Suspended', 'Business has been suspended and hidden from the customer marketplace.');
+      } else {
+        EventoraDB.updateVendorVerification(vendorId, 'Suspended');
+        Toast.show('warning', 'Status Updated', 'Vendor suspended (local mode).');
+      }
+      renderPortal();
+    } catch (err) {
+      Toast.show('error', 'Suspension Failed', err.message || 'Please try again.');
+    }
+  };
+
   const refreshAll = () => {
     renderPortal();
     Toast.show('info', 'Command Center Refreshed', 'Latest data synchronized.');
@@ -356,6 +384,7 @@ window.AdminPortalModule = (() => {
     updateVendorStatus,
     approveVendorLive,
     rejectVendorLive,
+    suspendVendorLive,
     refreshAll
   };
 })();

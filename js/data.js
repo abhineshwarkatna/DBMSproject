@@ -565,12 +565,25 @@ window.EventoraDB = (() => {
   const getVendorById = (vId) => (globalState.vendors || INITIAL_VENDORS).find(v => v.id === vId || v.vendor_id === vId) || null;
 
   const updateVendorVerification = (vId, status) => {
-    const v = (globalState.vendors || []).find(x => x.id === vId);
+    const v = (globalState.vendors || []).find(x => x.id === vId || x.vendor_id === vId || String(x.id) === String(vId) || ('v-' + x.vendor_id) === String(vId));
     if (v) {
       v.verificationStatus = status;
+      v.verification_status = status;
       v.verified = (status === 'Verified');
+      v.is_verified = (status === 'Verified');
       _saveGlobal();
       logAudit('VENDOR_VERIFY', `Vendor "${v.name}" status changed to ${status}`, { vendorId: vId, status });
+    }
+  };
+
+  const updateVendorStorefront = (vId, isOnline) => {
+    const v = (globalState.vendors || []).find(x => x.id === vId || x.vendor_id === vId || String(x.id) === String(vId) || ('v-' + x.vendor_id) === String(vId));
+    if (v) {
+      v.storefrontOnline = isOnline;
+      v.storefront_status = isOnline ? 'ONLINE' : 'OFFLINE';
+      v.is_published = isOnline;
+      _saveGlobal();
+      logAudit('VENDOR_STOREFRONT', `Vendor "${v.name}" storefront set to ${isOnline ? 'ONLINE' : 'OFFLINE'}`, { vendorId: vId, isOnline });
     }
   };
 
@@ -1032,7 +1045,7 @@ window.EventoraDB = (() => {
     addGuest, getGuests, updateGuest, deleteGuest,
     addExpense, getExpenses, updateExpense, deleteExpense,
     // Vendors
-    getVendorCatalog, getVendorById, updateVendorVerification, registerVendor,
+    getVendorCatalog, getVendorById, updateVendorVerification, updateVendorStorefront, registerVendor,
     // Bookings & Operations
     requestBooking, addBooking, getBookings, getAllBookings, getBookingsForEvent, getBookingsForVendor,
     vendorAcceptBooking, vendorRejectBooking, updateBookingStatus, deleteBooking,

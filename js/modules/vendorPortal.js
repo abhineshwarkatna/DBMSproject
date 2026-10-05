@@ -58,7 +58,11 @@ window.VendorPortalModule = (() => {
       const matched = catalog.find(v => (v.email || '').toLowerCase() === userEmail);
       if (matched) return matched;
     }
-    return EventoraDB.getVendorById(_activeVendorId) || catalog[0];
+    if (user?.user_metadata?.businessName) {
+      const matched = catalog.find(v => (v.name || '').toLowerCase() === user.user_metadata.businessName.toLowerCase());
+      if (matched) return matched;
+    }
+    return EventoraDB.getVendorById(_activeVendorId) || catalog[catalog.length - 1] || catalog[0];
   };
 
   const renderPortal = async (containerId = 'vendorPortalContainer') => {
@@ -67,10 +71,9 @@ window.VendorPortalModule = (() => {
 
     const vendor = resolveActiveVendor();
 
-    // ── Load live bookings from Supabase ──────────────────────────────────
-    let allBookings, pendingBookings, activeBookings, completedBookings;
+    // ── Load live bookings from Supabase / EventoraDB ──────────────────────
+    let allBookings = [], pendingBookings = [], activeBookings = [], completedBookings = [];
     if (window.LiveMarketplace && window.EventoraSupabase?.isConnected) {
-      // Resolve Supabase vendor_id once
       if (!_supabaseVendorId) {
         _supabaseVendorId = await _resolveSupabaseVendorId();
       }
@@ -82,13 +85,9 @@ window.VendorPortalModule = (() => {
         pendingBookings = raw.filter(b => b.booking_status === 'REQUESTED' || b.booking_status === 'PENDING_VENDOR');
         activeBookings  = raw.filter(b => ['ACCEPTED','CONFIRMED','IN_PROGRESS'].includes(b.booking_status));
         completedBookings = raw.filter(b => b.booking_status === 'COMPLETED');
-      } else {
-        // Vendor has no Supabase record yet — show create business prompt
-        _renderCreateBusinessPrompt(container, vendor);
-        return;
       }
-    } else {
-      // Fallback: local EventoraDB
+    }
+    if (allBookings.length === 0) {
       allBookings = EventoraDB.getBookingsForVendor(vendor.id);
       pendingBookings   = allBookings.filter(b => b.status === EventoraDB.BOOKING_STATUS.REQUESTED || b.status === EventoraDB.BOOKING_STATUS.PENDING_VENDOR);
       activeBookings    = allBookings.filter(b => [EventoraDB.BOOKING_STATUS.ACCEPTED, EventoraDB.BOOKING_STATUS.CONFIRMED, EventoraDB.BOOKING_STATUS.IN_PROGRESS].includes(b.status));
@@ -138,10 +137,10 @@ window.VendorPortalModule = (() => {
               <div>
                 <div style="display:flex;align-items:center;gap:10px">
                   <h1 style="font-family:var(--font-head);font-size:26px;font-weight:900;color:var(--text-primary);margin:0">${vendor.name}</h1>
-                  <span class="badge ${vendor.verified ? 'badge-green' : 'badge-amber'}">${vendor.verificationStatus || 'Verified Partner'}</span>
+                  <span class="badge ${vendor.verified ? 'badge-green' : (vendor.verificationStatus === 'Suspended' ? 'badge-red' : 'badge-amber')}">${vendor.verificationStatus || 'Verified Partner'}</span>
                 </div>
                 <div style="font-size:13px;color:var(--text-muted);margin-top:4px">
-                  ${vendor.category} · 📍 ${vendor.city} · 📞 ${vendor.phone} · ⭐ <strong>${vendor.rating}</strong> (${vendor.reviewCount + reviews.length} Reviews)
+                  ${vendor.category} · 📍 ${vendor.city} · 📞 ${vendor.phone} · ⭐ <strong>${Number(vendor.rating || 5.0).toFixed(1)}</strong> (${(vendor.reviewCount || 0) + reviews.length} Reviews)
                 </div>
               </div>
             </div>
@@ -151,9 +150,12 @@ window.VendorPortalModule = (() => {
               <span class="badge badge-purple" style="font-size:12px;font-weight:700;padding:5px 12px">
                 🏷️ Category: ${vendor.category}
               </span>
-              <span class="badge badge-green" style="font-size:12px;font-weight:700;padding:5px 12px">
-                ● Storefront Online
-              </span>
+              <button class="btn btn-xs ${vendor.storefrontOnline !== false && vendor.storefront_status !== 'OFFLINE' ? 'btn-success' : 'btn-secondary'}" onclick="VendorPortalModule.toggleStorefront()" style="font-weight:700;padding:5px 12px;cursor:pointer">
+                ${vendor.storefrontOnline !== false && vendor.storefront_status !== 'OFFLINE' ? '● Storefront Online' : '○ Storefront Offline'}
+              </button>
+              <button class="btn btn-secondary btn-xs" onclick="VendorPortalModule.showCreateBusinessModal()" style="font-weight:700">
+                + Register Business
+              </button>
               ${(window.AuthModule && AuthModule.getUserRole() === 'admin') ? `
               <div style="display:flex;align-items:center;gap:6px;background:var(--bg-subtle);padding:4px 8px;border-radius:var(--r-md);border:1px solid var(--border)">
                 <span style="font-size:10px;font-weight:800;color:var(--brand)">ADMIN SWITCH:</span>
@@ -490,7 +492,7 @@ window.VendorPortalModule = (() => {
       if (btn) { btn.disabled = true; btn.textContent = 'Creating...'; }
 
       try {
-        await LiveMarketplace.createVendorBusiness({
+        const created = await LiveMarketplace.createVendorBusiness({
           business_name: name,
           service_category: category,
           description: document.getElementById('bizDesc')?.value?.trim() || '',
@@ -500,14 +502,42 @@ window.VendorPortalModule = (() => {
           starting_price: document.getElementById('bizPrice')?.value || 0,
         });
         Modal.close();
-        Toast.show('success', '🎉 Business Created!', 'Your business is pending admin verification. You\'ll be notified once approved.');
-        _supabaseVendorId = null; // reset so it re-fetches
+        Toast.show('success', '🎉 Business Created!', 'Your business is registered and pending admin verification.');
+        _supabaseVendorId = created?.vendor_id || null;
+        if (created?.id) _activeVendorId = created.id;
         renderPortal();
       } catch (err) {
         Toast.show('error', 'Creation Failed', err.message || 'Please try again.');
         if (btn) { btn.disabled = false; btn.textContent = 'Create Business'; }
       }
     }, 'Create Business');
+  };
+
+  const toggleStorefront = async () => {
+    const vendor = resolveActiveVendor();
+    if (!vendor) return;
+    const isCurrentlyOnline = vendor.storefrontOnline !== false && vendor.storefront_status !== 'OFFLINE';
+    const newStatus = !isCurrentlyOnline;
+
+    if (window.LiveMarketplace) {
+      await LiveMarketplace.vendorToggleStorefront(vendor.vendor_id || vendor.id, newStatus);
+    }
+    vendor.storefrontOnline = newStatus;
+    vendor.storefront_status = newStatus ? 'ONLINE' : 'OFFLINE';
+    vendor.is_published = newStatus;
+
+    if (window.EventoraDB && typeof EventoraDB.updateVendorStorefront === 'function') {
+      EventoraDB.updateVendorStorefront(vendor.id, newStatus);
+    }
+
+    if (window.Toast) {
+      Toast.show(
+        newStatus ? 'success' : 'info',
+        newStatus ? 'Storefront Online' : 'Storefront Offline',
+        newStatus ? 'Your business is live and accepting customer bookings.' : 'Your business is temporarily hidden from the customer marketplace.'
+      );
+    }
+    renderPortal();
   };
 
   const acceptBooking = async (bookingId) => {
@@ -566,6 +596,7 @@ window.VendorPortalModule = (() => {
     renderPortal,
     acceptBooking,
     rejectBooking,
+    toggleStorefront,
     showCreateBusinessModal,
   };
 })();
