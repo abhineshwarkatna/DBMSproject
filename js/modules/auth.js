@@ -636,6 +636,19 @@ window.AuthModule = (() => {
       userMetadata.category     = bizCategory;
       userMetadata.city         = bizCity;
 
+      // Also register to real Supabase database so all customers see this vendor immediately
+      if (window.LiveMarketplace && typeof LiveMarketplace.createVendorBusiness === 'function') {
+        LiveMarketplace.createVendorBusiness({
+          business_name: bizName,
+          service_category: bizCategory,
+          location: bizCity,
+          email: email,
+          contact_name: name,
+          phone: '+91 98765 00000',
+          starting_price: bizCategory === 'Catering' ? 599 : (bizCategory === 'Venues' ? 85000 : 25000)
+        }).catch(err => console.warn('[Auth] Live business registration notice:', err));
+      }
+
     } else if (role === 'employee') {
       const staffRole = document.getElementById('signupStaffRole')?.value || 'Catering Setup Lead';
       const staffArea = document.getElementById('signupStaffArea')?.value?.trim() || 'Hyderabad Central';

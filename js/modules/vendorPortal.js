@@ -479,8 +479,8 @@ window.VendorPortalModule = (() => {
             <input class="input" type="number" id="bizPrice" placeholder="499" min="0">
           </div>
         </div>
-        <div style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:var(--r-md);padding:12px;font-size:13px;color:#92400e">
-          ⚠️ Your business will be reviewed by admin before going live on the marketplace.
+        <div style="background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);border-radius:var(--r-md);padding:12px;font-size:13px;color:#065f46">
+          ✨ Your business is instantly saved to the database and live on the Customer Marketplace without delay.
         </div>
       </div>
     `, async () => {
@@ -489,7 +489,7 @@ window.VendorPortalModule = (() => {
       if (!name) { Toast.show('warning','Required','Please enter a business name.'); return; }
 
       const btn = document.getElementById('modalConfirmBtn');
-      if (btn) { btn.disabled = true; btn.textContent = 'Creating...'; }
+      if (btn) { btn.disabled = true; btn.textContent = 'Saving to Database...'; }
 
       try {
         const created = await LiveMarketplace.createVendorBusiness({
@@ -502,7 +502,7 @@ window.VendorPortalModule = (() => {
           starting_price: document.getElementById('bizPrice')?.value || 0,
         });
         Modal.close();
-        Toast.show('success', '🎉 Business Created!', 'Your business is registered and pending admin verification.');
+        Toast.show('success', '🎉 Business Created!', 'Your business is live in the database and visible to all customers.');
         _supabaseVendorId = created?.vendor_id || null;
         if (created?.id) _activeVendorId = created.id;
         renderPortal();

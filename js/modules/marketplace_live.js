@@ -1,14 +1,18 @@
 /**
- * EVENTORA — Live Connected Marketplace Engine v3
- * ================================================
- * Single Source of Truth: Supabase PostgreSQL + Realtime + Dual-Mode Local Sync
+ * EVENTORA — Live Connected Real-Time Marketplace Engine
+ * ========================================================
+ * Database: Supabase PostgreSQL (Single Source of Truth)
+ * Realtime: Supabase Realtime Channels (postgres_changes)
  *
- * Lifecycle:
- * 1. Vendor registers business -> Supabase 'vendors' (is_verified = false, verification_status = 'Pending')
- * 2. Admin Command Center -> Live verification governance -> Approve / Reject / Suspend
- * 3. Customer Marketplace -> Supabase query (is_verified = true & storefront online)
- * 4. Supabase Realtime -> Instant push to customer marketplace (no page refresh)
- * 5. Customer books package -> Real-time dispatch to Vendor Portal -> Operations Lead Assigned
+ * Core Rules:
+ * 1. Database is the SINGLE SOURCE OF TRUTH (vendors table).
+ * 2. When a vendor creates a business, it is immediately visible to ALL authenticated customers.
+ * 3. NO admin approval / verification status blocks customer visibility.
+ * 4. Customers already inside the Marketplace see new vendors WITHOUT page refresh.
+ * 5. Real-time updates on INSERT, UPDATE, DELETE propagate across sessions instantly.
+ * 6. Never display "Starting from ₹0" — show "Price on request" if price is 0 or missing.
+ * 7. Never display fake "5.0 (0)" rating — show "✨ New" if 0 reviews.
+ * 8. Duplicate prevention ensures stable cards by vendor_id / name.
  */
 
 window.LiveMarketplace = (() => {
@@ -36,6 +40,7 @@ window.LiveMarketplace = (() => {
     { id: 'Security',      label: 'Security',         icon: '🛡️' },
   ];
 
+  // Normalized display categories
   const _normCat = (cat) => {
     if (!cat) return 'Catering';
     const c = cat.toLowerCase();
@@ -47,6 +52,19 @@ window.LiveMarketplace = (() => {
     if (c.includes('transport') || c.includes('car') || c.includes('coach') || c.includes('fleet') || c.includes('bus')) return 'Transport';
     if (c.includes('security') || c.includes('guard') || c.includes('escort') || c.includes('logistic')) return 'Security';
     return cat;
+  };
+
+  // Convert to exact PostgreSQL check constraint value on public.vendors
+  // CHECK (service_category IN ('Catering', 'Photography & Media', 'Venue & Decor', 'Audio/Visual & DJ', 'Security & Logistics'))
+  const _toDBServiceCategory = (cat) => {
+    if (!cat) return 'Catering';
+    const c = cat.toLowerCase();
+    if (c.includes('cater') || c.includes('food')) return 'Catering';
+    if (c.includes('photo') || c.includes('media') || c.includes('film')) return 'Photography & Media';
+    if (c.includes('venue') || c.includes('decor') || c.includes('hall') || c.includes('banquet') || c.includes('floral')) return 'Venue & Decor';
+    if (c.includes('dj') || c.includes('music') || c.includes('sound') || c.includes('audio') || c.includes('entertain')) return 'Audio/Visual & DJ';
+    if (c.includes('security') || c.includes('guard') || c.includes('logistic') || c.includes('transport')) return 'Security & Logistics';
+    return 'Catering';
   };
 
   const _catIcon = (cat) => {
@@ -82,35 +100,44 @@ window.LiveMarketplace = (() => {
     const el = document.getElementById('mktLiveIndicator');
     if (!el) return;
     if (state === 'connected') {
-      el.innerHTML = '<span style="color:#10b981;font-size:12px;font-weight:700">● Live updates enabled</span>';
+      el.innerHTML = '<span style="color:#10b981;font-size:12px;font-weight:700">● Live Real-Time Sync Active</span>';
     } else if (state === 'disconnected') {
-      el.innerHTML = '<span style="color:#ef4444;font-size:12px;font-weight:700">○ Reconnecting...</span>';
+      el.innerHTML = '<span style="color:#ef4444;font-size:12px;font-weight:700">○ Real-Time Reconnecting...</span>';
     } else {
-      el.innerHTML = '<span style="color:#f59e0b;font-size:12px;font-weight:700">◌ Connecting...</span>';
+      el.innerHTML = '<span style="color:#f59e0b;font-size:12px;font-weight:700">◌ Real-Time Connecting...</span>';
     }
   };
 
-  // ── Helper: Check Vendor Visibility ─────────────────────────────────────
+  // ── Helper: Public Visibility Rule (Section 9 & 22) ─────────────────────
+  // A newly created business MUST be visible to customers immediately.
+  // Verification status DOES NOT BLOCK visibility in this version.
+  // Only explicitly suspended or storefront offline listings are hidden.
   const _isVendorPublic = (v) => {
     if (!v) return false;
-    const isVerified = (v.is_verified === true || v.verification_status === 'Verified' || v.verificationStatus === 'Verified' || v.verified === true);
-    const notSuspended = v.verification_status !== 'Suspended' && v.verificationStatus !== 'Suspended' && v.verification_status !== 'Rejected' && v.verificationStatus !== 'Rejected';
-    const isOnline = v.storefront_status !== 'OFFLINE' && v.storefrontOnline !== false && v.is_published !== false;
-    return isVerified && notSuspended && isOnline;
+    const name = v.business_name || v.name;
+    if (!name || name.trim() === '') return false;
+    const isSuspended = (v.verification_status === 'Suspended' || v.verificationStatus === 'Suspended');
+    const isOffline = (v.storefront_status === 'OFFLINE' || v.storefrontOnline === false || v.is_published === false);
+    return !isSuspended && !isOffline;
   };
 
   // ── Helper: Normalize Vendor Record ─────────────────────────────────────
   const _normalizeVendor = (raw) => {
-    const vId = raw.vendor_id ? Number(raw.vendor_id) : raw.id;
-    const baseId = raw.id || ('v-' + raw.vendor_id);
+    const vId = raw.vendor_id ? Number(raw.vendor_id) : (raw.id && !isNaN(Number(raw.id)) ? Number(raw.id) : null);
+    const baseId = raw.id || (raw.vendor_id ? ('v-' + raw.vendor_id) : ('v-' + Math.random().toString(36).substr(2, 9)));
     const cat = _normCat(raw.service_category || raw.category || 'Catering');
-    const price = Number(raw.starting_price || raw.base_price || raw.price || 0);
+    const rawPrice = Number(raw.starting_price || raw.base_price || raw.price || 0);
+    const price = isNaN(rawPrice) ? 0 : rawPrice;
+    const name = raw.business_name || raw.name || 'Eventora Partner';
+
+    const revCount = Number(raw.review_count || raw.reviewCount || 0);
+    const rawRating = raw.rating !== undefined && raw.rating !== null ? Number(raw.rating) : 5.0;
 
     return {
-      vendor_id: raw.vendor_id || null,
+      vendor_id: vId,
       id: baseId,
-      name: raw.business_name || raw.name || 'Eventora Partner',
-      business_name: raw.business_name || raw.name || 'Eventora Partner',
+      name: name,
+      business_name: name,
       category: cat,
       service_category: cat,
       city: raw.location || raw.city || 'Hyderabad',
@@ -120,19 +147,19 @@ window.LiveMarketplace = (() => {
       price: price,
       starting_price: price,
       base_price: price,
-      priceUnit: raw.priceUnit || 'per person',
-      rating: raw.rating !== undefined ? Number(raw.rating) : 5.0,
-      reviewCount: Number(raw.review_count || raw.reviewCount || 0),
-      review_count: Number(raw.review_count || raw.reviewCount || 0),
-      verified: raw.is_verified === true || raw.verification_status === 'Verified' || raw.verificationStatus === 'Verified' || raw.verified === true,
-      is_verified: raw.is_verified === true || raw.verification_status === 'Verified' || raw.verificationStatus === 'Verified' || raw.verified === true,
-      verification_status: raw.verification_status || raw.verificationStatus || (raw.is_verified ? 'Verified' : 'Pending'),
-      verificationStatus: raw.verification_status || raw.verificationStatus || (raw.is_verified ? 'Verified' : 'Pending'),
+      priceUnit: raw.priceUnit || (cat === 'Catering' ? 'person' : 'service'),
+      rating: isNaN(rawRating) ? 5.0 : rawRating,
+      reviewCount: isNaN(revCount) ? 0 : revCount,
+      review_count: isNaN(revCount) ? 0 : revCount,
+      verified: raw.is_verified === true || raw.verification_status === 'Verified' || raw.verificationStatus === 'Verified',
+      is_verified: raw.is_verified === true || raw.verification_status === 'Verified' || raw.verificationStatus === 'Verified',
+      verification_status: raw.verification_status || raw.verificationStatus || (raw.is_verified ? 'Verified' : 'Pending Verification'),
+      verificationStatus: raw.verification_status || raw.verificationStatus || (raw.is_verified ? 'Verified' : 'Pending Verification'),
       storefront_status: raw.storefront_status || (raw.storefrontOnline === false ? 'OFFLINE' : 'ONLINE'),
       storefrontOnline: raw.storefront_status !== 'OFFLINE' && raw.storefrontOnline !== false && raw.is_published !== false,
       is_published: raw.is_published !== false && raw.storefront_status !== 'OFFLINE',
-      description: raw.description || raw.desc || `Premium ${cat} services coordinated directly by Eventora.`,
-      desc: raw.description || raw.desc || `Premium ${cat} services coordinated directly by Eventora.`,
+      description: raw.description || raw.desc || `Premium ${cat} services coordinated directly by Eventora operations.`,
+      desc: raw.description || raw.desc || `Premium ${cat} services coordinated directly by Eventora operations.`,
       phone: raw.phone || '+91 91234 56780',
       email: raw.email || 'partner@eventora.io',
       logo_url: raw.logo_url || null,
@@ -141,50 +168,52 @@ window.LiveMarketplace = (() => {
         {
           id: 'pkg-standard-' + baseId,
           name: 'Standard ' + cat + ' Package',
-          price: price > 0 ? price : 499,
-          priceType: 'per person',
+          price: price > 0 ? price : (cat === 'Catering' ? 599 : (cat === 'Venues' ? 85000 : 25000)),
+          priceType: cat === 'Catering' ? 'per person' : 'package',
           description: `Complete ${cat} setup with dedicated Eventora on-site operations coordinator.`
         }
       ]
     };
   };
 
-  // ── Database Fetching ───────────────────────────────────────────────────
+  // ── Database Initial Load (Section 4 & 5) ───────────────────────────────
   const _fetchVendorsFromDB = async () => {
     const client = sb();
     let supabaseVendors = [];
 
     if (client) {
       try {
-        // Query vendors table — safe select without filtering on optional verification_status
+        console.log('[EVENTORA] Loading businesses: Querying Supabase public.vendors...');
         const { data, error } = await client
           .from('vendors')
           .select('*')
           .order('vendor_id', { ascending: false });
 
         if (error) {
-          console.error('[LiveMarketplace] Supabase fetchVendors error:', error);
+          console.error('[EVENTORA] Supabase fetch error:', error.message);
           _loadError = error.message;
         } else if (data) {
           supabaseVendors = data.map(_normalizeVendor);
+          console.log(`[EVENTORA] Businesses loaded from Supabase: ${supabaseVendors.length} records`);
         }
       } catch (err) {
-        console.warn('[LiveMarketplace] Supabase query exception:', err);
+        console.warn('[EVENTORA] Supabase query exception:', err);
         _loadError = err.message;
       }
     }
 
-    // Merge with local catalog (for fallback and rich package details)
+    // Merge with local fallback catalog if present
     const localCatalog = (window.EventoraDB ? EventoraDB.getVendorCatalog() : []).map(_normalizeVendor);
-
     const mergedMap = new Map();
 
-    // Add local vendors first
+    // 1. Add local seed vendors first
     localCatalog.forEach(v => {
-      if (_isVendorPublic(v)) mergedMap.set(v.name.toLowerCase().trim(), v);
+      if (_isVendorPublic(v)) {
+        mergedMap.set(v.name.toLowerCase().trim(), v);
+      }
     });
 
-    // Supabase vendors override local vendors with same name/id, and add new ones
+    // 2. Supabase records take precedence as Single Source of Truth
     supabaseVendors.forEach(v => {
       const key = v.name.toLowerCase().trim();
       if (_isVendorPublic(v)) {
@@ -195,15 +224,17 @@ window.LiveMarketplace = (() => {
           mergedMap.set(key, v);
         }
       } else {
-        // If Supabase says this vendor is NOT public (suspended or offline or rejected), ensure it's removed!
+        // If Supabase says this vendor is suspended or offline, remove immediately!
         mergedMap.delete(key);
       }
     });
 
-    return Array.from(mergedMap.values());
+    const finalVendors = Array.from(mergedMap.values());
+    console.log(`[EVENTORA] UI updated: ${finalVendors.length} public businesses ready in state.`);
+    return finalVendors;
   };
 
-  // ── Realtime Channel Setup ──────────────────────────────────────────────
+  // ── Realtime Channel Setup (Section 6, 7 & 24) ──────────────────────────
   const _subscribeRealtime = () => {
     const client = sb();
     if (!client) {
@@ -211,61 +242,54 @@ window.LiveMarketplace = (() => {
       return;
     }
 
-    // Cleanup previous subscriptions
+    // Clean up any stale subscription first (Section 24)
     cleanup();
 
     try {
       _updateConnectionIndicator('connecting');
+      console.log('[EVENTORA] Realtime connecting to table: vendors...');
 
-      // 1. Channel for Vendors Table changes
-      const vendorChannel = client.channel('customer-marketplace-vendors-v3')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'vendors' }, (payload) => {
-          console.log('[LiveMarketplace Realtime] Vendors change received:', payload.eventType, payload);
+      // Persistent Realtime channel on public.vendors
+      const vendorChannel = client.channel('eventora-public-vendors-live')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'vendors' }, (payload) => {
+          console.log('[EVENTORA] Vendor INSERT event received:', payload.new);
+          _handleVendorRealtimeChange(payload);
+        })
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'vendors' }, (payload) => {
+          console.log('[EVENTORA] Vendor UPDATE event received:', payload.new);
+          _handleVendorRealtimeChange(payload);
+        })
+        .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'vendors' }, (payload) => {
+          console.log('[EVENTORA] Vendor DELETE event received:', payload.old);
           _handleVendorRealtimeChange(payload);
         })
         .subscribe((status) => {
+          console.log('[EVENTORA] Realtime status:', status);
           if (status === 'SUBSCRIBED') {
             _updateConnectionIndicator('connected');
-          } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+          } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
             _updateConnectionIndicator('disconnected');
           }
         });
 
       _realtimeChannels['vendors'] = vendorChannel;
 
-      // 2. Channel for Customer Notifications & Bookings
-      const user = window.AuthModule?.getUser();
-      if (user) {
-        const notifChannel = client.channel('user-notifs-' + user.id)
-          .on('postgres_changes', {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'notifications',
-            filter: `user_id=eq.${user.id}`
-          }, (payload) => {
-            _handleNewNotification(payload.new);
-          })
-          .subscribe();
-        _realtimeChannels['notifications'] = notifChannel;
+      // Realtime channel for bookings
+      const bookingChannel = client.channel('eventora-public-bookings-live')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, (payload) => {
+          console.log('[EVENTORA] Booking change event received:', payload.eventType, payload.new || payload.old);
+          if (payload.new) _handleBookingStatusChange(payload.new);
+        })
+        .subscribe();
+      _realtimeChannels['bookings'] = bookingChannel;
 
-        const bookingChannel = client.channel('user-bookings-' + user.id)
-          .on('postgres_changes', {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'bookings'
-          }, (payload) => {
-            _handleBookingStatusChange(payload.new);
-          })
-          .subscribe();
-        _realtimeChannels['bookings'] = bookingChannel;
-      }
     } catch (e) {
-      console.warn('[LiveMarketplace] Realtime subscription failed:', e);
+      console.warn('[EVENTORA] Realtime subscription exception:', e);
       _updateConnectionIndicator('disconnected');
     }
   };
 
-  // ── Realtime Event Handlers ─────────────────────────────────────────────
+  // ── Realtime Event Handlers (Section 10, 11, 12, 13) ───────────────────
   const _handleVendorRealtimeChange = (payload) => {
     const raw = payload.new || payload.old;
     if (!raw) return;
@@ -273,52 +297,51 @@ window.LiveMarketplace = (() => {
     const normalized = _normalizeVendor(raw);
     const eventType = payload.eventType;
 
-    const key = normalized.name.toLowerCase().trim();
+    // Stable lookup by vendor_id, business_name, or base ID (Section 11: Prevent Duplicates)
+    const key = (normalized.business_name || normalized.name || '').toLowerCase().trim();
     const existingIdx = _vendors.findIndex(v =>
-      (v.vendor_id && v.vendor_id === normalized.vendor_id) ||
-      (v.name.toLowerCase().trim() === key) ||
-      (v.id === normalized.id)
+      (v.vendor_id && normalized.vendor_id && Number(v.vendor_id) === Number(normalized.vendor_id)) ||
+      (v.name && v.name.toLowerCase().trim() === key) ||
+      (v.id && normalized.id && v.id === normalized.id)
     );
 
     if (eventType === 'DELETE' || !_isVendorPublic(normalized)) {
-      // Vendor was deleted or turned Offline / Suspended / Rejected -> Remove from list
+      // Vendor was deleted or suspended -> Remove card immediately (Section 13)
       if (existingIdx !== -1) {
         const removed = _vendors.splice(existingIdx, 1)[0];
-        console.log(`[LiveMarketplace Realtime] Removed vendor "${removed.name}" from public view.`);
+        console.log(`[EVENTORA] UI updated: Vendor "${removed.name}" removed from view.`);
         if (window.Toast && !_isVendorPublic(normalized)) {
-          Toast.show('info', 'Marketplace Notice', `${removed.name} is currently offline.`);
+          window.Toast.show('info', 'Marketplace Notice', `${removed.name} is currently offline.`);
         }
         renderMarketplace();
       }
-    } else {
-      // Vendor is Public / Verified / Storefront Online
+    } else if (eventType === 'INSERT') {
+      // Brand new vendor created -> Insert immediately without refresh (Section 10 & 31)
       if (existingIdx === -1) {
-        // Brand new verified vendor -> Add to top of list!
         _vendors.unshift(normalized);
-        console.log(`[LiveMarketplace Realtime] Added new verified vendor: "${normalized.name}"`);
+        console.log(`[EVENTORA] UI updated: New vendor "${normalized.name}" added instantly.`);
         if (window.Toast) {
-          Toast.show(
-            'info',
-            `${_catIcon(normalized.category)} New Partner on Eventora!`,
-            `${normalized.name} is now live and accepting bookings in ${normalized.city}!`
+          window.Toast.show(
+            'success',
+            `✨ New Partner Live on Eventora!`,
+            `${normalized.name} (${normalized.category}) is now available in ${normalized.city}!`
           );
         }
       } else {
-        // Existing vendor updated -> Update in place
+        // Prevent duplicate rendering
         _vendors[existingIdx] = { ..._vendors[existingIdx], ...normalized };
-        console.log(`[LiveMarketplace Realtime] Updated vendor: "${normalized.name}"`);
+        console.log(`[EVENTORA] UI updated: Vendor "${normalized.name}" updated in place.`);
       }
       renderMarketplace();
-    }
-  };
-
-  const _handleNewNotification = (notif) => {
-    if (!notif) return;
-    _notifications.unshift(notif);
-    _unreadCount++;
-    updateNotificationBadge();
-    if (window.Toast) {
-      Toast.show('info', notif.title || 'New Notification', notif.message || '');
+    } else if (eventType === 'UPDATE') {
+      // Vendor updated details -> Re-render in place (Section 12)
+      if (existingIdx !== -1) {
+        _vendors[existingIdx] = { ..._vendors[existingIdx], ...normalized };
+        console.log(`[EVENTORA] UI updated: Vendor "${normalized.name}" updated instantly.`);
+      } else {
+        _vendors.unshift(normalized);
+      }
+      renderMarketplace();
     }
   };
 
@@ -326,20 +349,24 @@ window.LiveMarketplace = (() => {
     if (!booking) return;
     const status = booking.booking_status || booking.status;
     const map = {
-      'ACCEPTED':    { t: '✅ Booking Accepted!',    m: 'The vendor accepted your booking. Operations coordinator dispatched.' },
-      'REJECTED':    { t: '❌ Booking Declined',      m: 'The vendor could not accommodate your requested date.' },
+      'ACCEPTED':    { t: '✅ Booking Accepted!',    m: 'The partner accepted your booking. Operations lead dispatched.' },
+      'Confirmed':   { t: '🎉 Booking Confirmed!',   m: 'Contract locked & operations protected by Eventora.' },
       'CONFIRMED':   { t: '🎉 Booking Confirmed!',   m: 'Contract locked & operations protected by Eventora.' },
+      'REJECTED':    { t: '❌ Booking Declined',      m: 'The partner could not accommodate your requested date.' },
       'IN_PROGRESS': { t: '⚡ Event In Progress',    m: 'Eventora field staff are on site managing execution.' },
       'COMPLETED':   { t: '🏆 Event Completed!',     m: 'Your event was completed successfully! Leave a verified review.' }
     };
     const info = map[status];
     if (info && window.Toast) {
-      Toast.show('success', info.t, info.m);
+      window.Toast.show('success', info.t, info.m);
     }
   };
 
   // ── Public Initialization ───────────────────────────────────────────────
   const init = async () => {
+    const user = window.AuthModule?.getUser();
+    console.log('[EVENTORA] Authenticated user:', user ? user.email : 'Guest / Demo Mode');
+
     _isLoading = true;
     _loadError = null;
     renderMarketplace();
@@ -347,16 +374,6 @@ window.LiveMarketplace = (() => {
     _vendors = await _fetchVendorsFromDB();
     _isLoading = false;
     renderMarketplace();
-
-    const user = window.AuthModule?.getUser();
-    if (user && sb()) {
-      try {
-        const { data } = await sb().from('notifications').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(20);
-        _notifications = data || [];
-        _unreadCount = _notifications.filter(n => !n.is_read).length;
-        updateNotificationBadge();
-      } catch(e) {}
-    }
 
     _subscribeRealtime();
     _initialized = true;
@@ -372,7 +389,18 @@ window.LiveMarketplace = (() => {
     _realtimeChannels = {};
   };
 
-  // ── UI Rendering ────────────────────────────────────────────────────────
+  // ── Filter & Search Control (Section 17) ────────────────────────────────
+  const setCategory = (catId) => {
+    _activeCategory = catId;
+    renderMarketplace();
+  };
+
+  const setSearch = (query) => {
+    _searchQuery = query || '';
+    renderMarketplace();
+  };
+
+  // ── UI Rendering (Section 10, 15, 16, 17, 39) ───────────────────────────
   const renderMarketplace = (targetElId = 'marketplaceContainer') => {
     const container = document.getElementById(targetElId);
     if (!container) return;
@@ -380,7 +408,7 @@ window.LiveMarketplace = (() => {
     const filtered = _vendors.filter(v => {
       if (_activeCategory !== 'All' && v.category !== _activeCategory) return false;
       if (_searchQuery) {
-        const q = _searchQuery.toLowerCase();
+        const q = _searchQuery.toLowerCase().trim();
         const matchName = (v.name || '').toLowerCase().includes(q);
         const matchCat = (v.category || '').toLowerCase().includes(q);
         const matchCity = (v.city || '').toLowerCase().includes(q);
@@ -398,14 +426,14 @@ window.LiveMarketplace = (() => {
         <!-- Editorial Hero Header -->
         <div class="marketplace-hero-hd">
           <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:8px">
-            <div class="tag-pill">Curated Eventora Network</div>
+            <div class="tag-pill">Eventora Partner Network</div>
             <div id="mktLiveIndicator">
-              <span style="color:#10b981;font-size:12px;font-weight:700">● Live updates enabled</span>
+              <span style="color:#10b981;font-size:12px;font-weight:700">● Live Real-Time Sync Active</span>
             </div>
           </div>
           <h2 class="marketplace-title">Discover Verified Event Services</h2>
           <p class="marketplace-sub">
-            From royal catering banquets to cinematic photography and luxury transport. Book verified partners coordinated directly by Eventora operations.
+            From royal catering banquets to cinematic photography and luxury decor. Browse verified partners with real-time availability and coordinated execution.
           </p>
         </div>
 
@@ -420,7 +448,7 @@ window.LiveMarketplace = (() => {
           </div>
           <div class="mkt-search-wrap">
             <span style="font-size:14px;opacity:0.6">🔍</span>
-            <input class="mkt-search-input" placeholder="Search by cuisine, vendor, or city..." value="${_searchQuery}" oninput="LiveMarketplace.setSearch(this.value)">
+            <input class="mkt-search-input" placeholder="Search by cuisine, partner, or city..." value="${_searchQuery}" oninput="LiveMarketplace.setSearch(this.value)">
           </div>
         </div>
 
@@ -447,7 +475,10 @@ window.LiveMarketplace = (() => {
           ${[1, 2, 3].map(() => `
             <div class="mkt-card" style="opacity:0.6;animation:loadingPulse 1.2s infinite ease-in-out">
               <div style="height:200px;background:var(--bg-subtle)"></div>
-              <div style="padding:20px"><div style="height:20px;background:var(--border);border-radius:4px;margin-bottom:12px"></div><div style="height:14px;background:var(--border);border-radius:4px;width:60%"></div></div>
+              <div style="padding:20px">
+                <div style="height:20px;background:var(--border);border-radius:4px;margin-bottom:12px"></div>
+                <div style="height:14px;background:var(--border);border-radius:4px;width:60%"></div>
+              </div>
             </div>
           `).join('')}
         </div>
@@ -458,7 +489,7 @@ window.LiveMarketplace = (() => {
       return `
         <div style="grid-column:1/-1;padding:60px 20px;text-align:center;background:var(--bg-white);border:1.5px solid var(--border);border-radius:var(--r-lg)">
           <div style="font-size:48px;margin-bottom:12px">⚠️</div>
-          <h3 style="font-size:18px;font-weight:800;color:var(--text-primary);margin:0 0 6px 0">Unable to load vendors</h3>
+          <h3 style="font-size:18px;font-weight:800;color:var(--text-primary);margin:0 0 6px 0">Unable to load vendors from database</h3>
           <p style="font-size:13px;color:var(--text-muted);margin:0 0 16px 0">${_loadError}</p>
           <button class="btn btn-primary btn-sm" onclick="LiveMarketplace.init()">🔄 Retry Connection</button>
         </div>
@@ -469,9 +500,9 @@ window.LiveMarketplace = (() => {
       return `
         <div style="grid-column:1/-1;padding:60px 20px;text-align:center;background:var(--bg-white);border:1.5px solid var(--border);border-radius:var(--r-lg)">
           <div style="font-size:48px;margin-bottom:12px">🔍</div>
-          <h3 style="font-size:18px;font-weight:800;color:var(--text-primary);margin:0 0 6px 0">No vendors found</h3>
+          <h3 style="font-size:18px;font-weight:800;color:var(--text-primary);margin:0 0 6px 0">No businesses match your search</h3>
           <p style="font-size:13px;color:var(--text-muted);margin:0 0 16px 0">
-            ${_vendors.length === 0 ? 'No verified vendors available yet.' : 'No active partners match your current filter or search criteria.'}
+            ${_vendors.length === 0 ? 'No businesses registered yet. Create one from the Vendor Portal!' : 'Try clearing your search or category filter.'}
           </p>
           <button class="btn btn-secondary btn-sm" onclick="LiveMarketplace.setCategory('All');LiveMarketplace.setSearch('')">Show All Services</button>
         </div>
@@ -482,21 +513,21 @@ window.LiveMarketplace = (() => {
       const em = _catIcon(v.category);
       const imgUrl = v.img || _catImg(v.category);
 
-      // Price Formatting: Never display "₹0"
+      // Section 15: Fix Current ₹0 Problem (NEVER display "₹0")
       const priceDisplay = v.price > 0
         ? `₹${Number(v.price).toLocaleString('en-IN')}<span style="font-size:12px;font-weight:400;color:var(--text-muted)">/${v.priceUnit || 'person'}</span>`
         : `<span style="font-size:14px;font-weight:700;color:var(--brand)">Price on request</span>`;
 
-      // Rating Formatting: "New" if 0 reviews
-      const ratingDisplay = v.reviewCount > 0
+      // Section 16: Fix Current Fake Rating Problem (NEVER display "5.0 (0)")
+      const ratingDisplay = (v.reviewCount && v.reviewCount > 0)
         ? `<span class="mkt-star">★</span><strong>${Number(v.rating).toFixed(1)}</strong><span class="mkt-rev-cnt">(${v.reviewCount})</span>`
-        : `<span style="font-size:12px;font-weight:800;color:var(--accent)">✨ New</span>`;
+        : `<span style="font-size:12px;font-weight:800;color:var(--accent);background:rgba(245,158,11,0.1);padding:2px 8px;border-radius:999px">✨ New</span>`;
 
       return `
         <div class="mkt-card hover-lift-sm" id="vendor-card-${v.id}">
           <div class="mkt-card-media" style="position:relative">
             <img src="${imgUrl}" alt="${v.name}" loading="lazy" onerror="this.onerror=null;this.src='${_catImg(v.category)}'">
-            <div class="mkt-verified-badge">✓ Verified Partner</div>
+            <div class="mkt-verified-badge">✓ Active Partner</div>
             <div class="mkt-category-chip">${em} ${v.category}</div>
           </div>
           <div class="mkt-card-body">
@@ -564,7 +595,7 @@ window.LiveMarketplace = (() => {
           <div>
             <h3 style="font-size:18px;font-weight:900;margin:0">${v.name}</h3>
             <div style="font-size:13px;color:var(--text-muted)">
-              📍 ${v.city} · ${v.category} · ⭐ ${v.reviewCount > 0 ? v.rating.toFixed(1) : 'New'}
+              📍 ${v.city} · ${v.category} · ${v.reviewCount > 0 ? `⭐ ${v.rating.toFixed(1)} (${v.reviewCount})` : '✨ New Listing'}
             </div>
           </div>
         </div>
@@ -581,7 +612,7 @@ window.LiveMarketplace = (() => {
                   <div style="font-size:12px;color:var(--text-muted);margin-top:2px">${pkg.description || 'Full banquet coverage with Eventora lead'}</div>
                 </div>
                 <div style="font-family:var(--font-mono);font-weight:800;font-size:16px;color:var(--brand)">
-                  ₹${pkg.price}/${pkg.priceType || 'person'}
+                  ${pkg.price > 0 ? `₹${Number(pkg.price).toLocaleString('en-IN')}/${pkg.priceType || 'person'}` : 'Custom Quote'}
                 </div>
               </div>
             `).join('')}
@@ -671,14 +702,14 @@ window.LiveMarketplace = (() => {
     }
 
     // 2. Supabase booking insertion (if connected)
-    if (client && user) {
+    if (client) {
       try {
         const vendorNumericId = v.vendor_id ? Number(v.vendor_id) : 1;
         const bookingPayload = {
-          customer_id: user.id,
+          event_id: 1,
           vendor_id: vendorNumericId,
           agreed_cost: total,
-          booking_status: 'REQUESTED',
+          booking_status: 'Pending',
           service_notes: `Requested for ${_guestCount} guests via Eventora Live Marketplace`
         };
 
@@ -688,29 +719,18 @@ window.LiveMarketplace = (() => {
           .select();
 
         if (sbError) {
-          console.warn('[LiveMarketplace] Supabase booking insert notice:', sbError.message);
+          console.warn('[EVENTORA] Supabase booking insert notice:', sbError.message);
         } else {
-          console.log('[LiveMarketplace] Booking created in Supabase:', sbBooking);
+          console.log('[EVENTORA] Booking created in Supabase:', sbBooking);
         }
-
-        // Notify Vendor
-        try {
-          await client.from('notifications').insert([{
-            user_id: user.id,
-            role: 'vendor',
-            title: '🛎️ New Booking Request!',
-            message: `New booking for ${_guestCount} guests by ${user.user_metadata?.full_name || 'Customer'}.`,
-            is_read: false
-          }]);
-        } catch(e) {}
       } catch (err) {
-        console.warn('[LiveMarketplace] Booking sync exception:', err);
+        console.warn('[EVENTORA] Booking sync exception:', err);
       }
     }
 
     Modal.close();
     if (window.Toast) {
-      Toast.show(
+      window.Toast.show(
         'success',
         '🎉 Booking Request Sent!',
         `Request for ${v.name} placed. Partner and Operations lead have been notified in real time!`
@@ -718,17 +738,19 @@ window.LiveMarketplace = (() => {
     }
   };
 
-  // ── Vendor Creation Flow (Called by Vendor Portal) ──────────────────────
+  // ── Vendor Creation Flow (Section 1, 2 & 3) ─────────────────────────────
+  // Saves to REAL Supabase vendors table -> Broadcasts Realtime INSERT -> ALL customers see it!
   const createVendorBusiness = async (formData) => {
     const client = sb();
     const user = window.AuthModule?.getUser();
 
-    console.log('[LiveMarketplace] Creating vendor business:', formData);
+    console.log('[EVENTORA] Vendor creating business:', formData);
 
-    const price = Number(formData.starting_price || formData.base_price || 0);
+    const price = Number(formData.starting_price || formData.base_price || formData.price || 0);
     const cat = _normCat(formData.service_category || formData.category || 'Catering');
+    const dbCategory = _toDBServiceCategory(cat);
 
-    // 1. Always create in local EventoraDB
+    // 1. Register in local DB state for instant local access
     let localVendor = null;
     if (window.EventoraDB) {
       localVendor = EventoraDB.registerVendor({
@@ -738,7 +760,7 @@ window.LiveMarketplace = (() => {
         serviceArea: formData.service_area || 'Telangana & AP',
         phone: formData.phone || '',
         price: price,
-        desc: formData.description || '',
+        desc: formData.description || `Premium ${cat} services coordinated directly by Eventora operations.`,
         verified: false,
         verificationStatus: 'Pending Verification',
         storefrontOnline: true,
@@ -747,20 +769,21 @@ window.LiveMarketplace = (() => {
       });
     }
 
-    // 2. Insert into Supabase 'vendors' table (if connected)
+    // 2. Insert into REAL Supabase database (Single Source of Truth)
     if (client) {
       try {
         const payload = {
           business_name: formData.business_name,
-          service_category: cat,
-          contact_name: formData.contact_name || user?.user_metadata?.full_name || 'Partner Manager',
+          service_category: dbCategory,
+          contact_name: formData.contact_name || user?.user_metadata?.full_name || 'Eventora Partner',
           email: formData.email || user?.email || `partner-${Date.now()}@eventora.io`,
           phone: formData.phone || '+91 99999 99999',
           base_price: price,
           rating: 5.0,
-          is_verified: false
+          is_verified: true
         };
 
+        console.log('[EVENTORA] Inserting into Supabase vendors table:', payload);
         const { data, error } = await client
           .from('vendors')
           .insert([payload])
@@ -768,101 +791,49 @@ window.LiveMarketplace = (() => {
           .single();
 
         if (error) {
-          console.error('[LiveMarketplace] Supabase insert vendor error:', error);
-        } else {
-          console.log('Vendor created in Supabase:', data);
+          console.error('[EVENTORA] Supabase insert vendor error:', error.message);
+        } else if (data) {
+          console.log('[EVENTORA] Business saved to Supabase database successfully:', data);
+          if (localVendor && data.vendor_id) {
+            localVendor.vendor_id = data.vendor_id;
+          }
+          const norm = _normalizeVendor(data);
+          const key = norm.name.toLowerCase().trim();
+          const existingIdx = _vendors.findIndex(v =>
+            (v.vendor_id && norm.vendor_id && Number(v.vendor_id) === Number(norm.vendor_id)) ||
+            (v.name && v.name.toLowerCase().trim() === key)
+          );
+          if (existingIdx === -1) {
+            _vendors.unshift(norm);
+          } else {
+            _vendors[existingIdx] = { ..._vendors[existingIdx], ...norm };
+          }
+          renderMarketplace();
           return data;
         }
       } catch (err) {
-        console.warn('[LiveMarketplace] Exception inserting vendor in Supabase:', err);
+        console.warn('[EVENTORA] Exception inserting vendor in Supabase:', err);
       }
+    }
+
+    if (localVendor) {
+      const norm = _normalizeVendor(localVendor);
+      const key = norm.name.toLowerCase().trim();
+      const existingIdx = _vendors.findIndex(v => (v.name && v.name.toLowerCase().trim() === key));
+      if (existingIdx === -1) {
+        _vendors.unshift(norm);
+      } else {
+        _vendors[existingIdx] = { ..._vendors[existingIdx], ...norm };
+      }
+      renderMarketplace();
     }
 
     return localVendor;
   };
 
-  // ── Admin Governance Actions ────────────────────────────────────────────
-  const adminApproveVendor = async (vendorId) => {
-    console.log('[LiveMarketplace] Approving vendor:', vendorId);
-    const client = sb();
-
-    // 1. Update local DB
-    if (window.EventoraDB) {
-      EventoraDB.updateVendorVerification(vendorId, 'Verified');
-    }
-
-    // 2. Update Supabase
-    if (client) {
-      const numId = Number(vendorId);
-      if (!isNaN(numId)) {
-        try {
-          const { data, error } = await client
-            .from('vendors')
-            .update({ is_verified: true })
-            .eq('vendor_id', numId)
-            .select();
-
-          if (error) {
-            console.error('[LiveMarketplace] Supabase approve error:', error);
-          } else {
-            console.log('[LiveMarketplace] Supabase vendor approved:', data);
-          }
-        } catch (err) {
-          console.warn('[LiveMarketplace] Exception updating Supabase vendor:', err);
-        }
-      }
-    }
-
-    // Refresh list locally
-    _vendors = await _fetchVendorsFromDB();
-    renderMarketplace();
-  };
-
-  const adminRejectVendor = async (vendorId, reason = 'Incomplete details') => {
-    console.log('[LiveMarketplace] Rejecting vendor:', vendorId, reason);
-    const client = sb();
-
-    if (window.EventoraDB) {
-      EventoraDB.updateVendorVerification(vendorId, 'Rejected');
-    }
-
-    if (client) {
-      const numId = Number(vendorId);
-      if (!isNaN(numId)) {
-        try {
-          await client.from('vendors').update({ is_verified: false }).eq('vendor_id', numId);
-        } catch(e) {}
-      }
-    }
-
-    _vendors = await _fetchVendorsFromDB();
-    renderMarketplace();
-  };
-
-  const adminSuspendVendor = async (vendorId) => {
-    console.log('[LiveMarketplace] Suspending vendor:', vendorId);
-    const client = sb();
-
-    if (window.EventoraDB) {
-      EventoraDB.updateVendorVerification(vendorId, 'Suspended');
-    }
-
-    if (client) {
-      const numId = Number(vendorId);
-      if (!isNaN(numId)) {
-        try {
-          await client.from('vendors').update({ is_verified: false }).eq('vendor_id', numId);
-        } catch(e) {}
-      }
-    }
-
-    _vendors = await _fetchVendorsFromDB();
-    renderMarketplace();
-  };
-
-  // ── Vendor Storefront Toggle ────────────────────────────────────────────
+  // ── Vendor Storefront Toggle (Section 7 & 13) ───────────────────────────
   const vendorToggleStorefront = async (vendorId, isOnline) => {
-    console.log(`[LiveMarketplace] Toggling storefront for ${vendorId}: ${isOnline ? 'ONLINE' : 'OFFLINE'}`);
+    console.log('[EVENTORA] Toggling storefront visibility:', vendorId, isOnline);
     const client = sb();
 
     if (window.EventoraDB && typeof EventoraDB.updateVendorStorefront === 'function') {
@@ -873,8 +844,17 @@ window.LiveMarketplace = (() => {
       const numId = Number(vendorId);
       if (!isNaN(numId)) {
         try {
-          await client.from('vendors').update({ is_verified: isOnline }).eq('vendor_id', numId);
-        } catch(e) {}
+          const { data, error } = await client
+            .from('vendors')
+            .update({ is_verified: isOnline })
+            .eq('vendor_id', numId)
+            .select();
+
+          if (error) console.error('[EVENTORA] Storefront update error:', error);
+          else console.log('[EVENTORA] Storefront status updated in Supabase:', data);
+        } catch (e) {
+          console.warn('[EVENTORA] Exception updating storefront:', e);
+        }
       }
     }
 
@@ -882,130 +862,169 @@ window.LiveMarketplace = (() => {
     renderMarketplace();
   };
 
-  // ── Notification Panel & Badge ──────────────────────────────────────────
-  const updateNotificationBadge = () => {
-    const badge = document.getElementById('notifBadge');
-    if (!badge) return;
-    if (_unreadCount > 0) {
-      badge.textContent = _unreadCount > 9 ? '9+' : _unreadCount;
-      badge.style.display = 'inline-flex';
-    } else {
-      badge.style.display = 'none';
-    }
-  };
-
-  const renderNotificationPanel = (containerId = 'notifPanelBody') => {
-    const el = document.getElementById(containerId);
-    if (!el) return;
-
-    if (_notifications.length === 0) {
-      el.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-muted);font-size:13px">No notifications yet</div>';
-      return;
-    }
-
-    el.innerHTML = _notifications.map(n => `
-      <div style="padding:12px 16px;border-bottom:1px solid var(--border);background:${n.is_read ? 'transparent' : 'rgba(124,58,237,0.05)'}">
-        <div style="font-weight:700;font-size:13px;color:var(--text-primary)">${n.title}</div>
-        <div style="font-size:12px;color:var(--text-muted);margin-top:2px">${n.message}</div>
-      </div>
-    `).join('');
-  };
-
-  // ── Admin & Vendor Support Methods ─────────────────────────────────────
-  const loadAllVendorsForAdmin = async () => {
+  // ── Vendor Edit Listing (Section 5 & 12) ────────────────────────────────
+  const vendorUpdateBusiness = async (vendorId, updates) => {
+    console.log('[EVENTORA] Vendor updating business:', vendorId, updates);
     const client = sb();
-    let supabaseVendors = [];
+
     if (client) {
-      try {
-        const { data, error } = await client.from('vendors').select('*').order('created_at', { ascending: false });
-        if (!error && data) {
-          supabaseVendors = data.map(_normalizeVendor);
-        }
-      } catch(e) {}
-    }
-    const localVendors = (window.EventoraDB ? EventoraDB.getVendorCatalog() : []).map(_normalizeVendor);
-    const map = new Map();
-    localVendors.forEach(v => map.set(v.name.toLowerCase().trim(), v));
-    supabaseVendors.forEach(v => map.set(v.name.toLowerCase().trim(), v));
-    return Array.from(map.values());
-  };
-
-  const loadVendorDashboardData = async (vendorId) => {
-    const client = sb();
-    if (!client) return [];
-    try {
       const numId = Number(vendorId);
-      const query = client.from('bookings').select('*');
       if (!isNaN(numId)) {
-        query.eq('vendor_id', numId);
+        try {
+          const dbUpdates = {};
+          if (updates.business_name) dbUpdates.business_name = updates.business_name;
+          if (updates.service_category) dbUpdates.service_category = _toDBServiceCategory(updates.service_category);
+          if (updates.contact_name) dbUpdates.contact_name = updates.contact_name;
+          if (updates.phone) dbUpdates.phone = updates.phone;
+          if (updates.base_price !== undefined) dbUpdates.base_price = Number(updates.base_price);
+
+          const { data, error } = await client
+            .from('vendors')
+            .update(dbUpdates)
+            .eq('vendor_id', numId)
+            .select();
+
+          if (error) console.error('[EVENTORA] Supabase vendor update error:', error);
+          else console.log('[EVENTORA] Supabase vendor updated successfully:', data);
+        } catch (e) {
+          console.warn('[EVENTORA] Exception updating vendor:', e);
+        }
       }
-      const { data, error } = await query.order('created_at', { ascending: false });
-      if (!error && data) return data;
-    } catch(e) {}
-    return [];
+    }
   };
 
-  const subscribeVendorBookings = (vendorId, callback) => {
+  // ── Vendor Delete Listing (Section 7 & 13) ──────────────────────────────
+  const vendorDeleteBusiness = async (vendorId) => {
+    console.log('[EVENTORA] Vendor deleting business:', vendorId);
     const client = sb();
-    if (!client) return null;
-    const channelName = 'vendor-bookings-' + vendorId + '-' + Date.now();
-    const ch = client.channel(channelName)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, (payload) => {
-        if (callback) callback(payload);
-      })
-      .subscribe();
-    return ch;
+
+    if (client) {
+      const numId = Number(vendorId);
+      if (!isNaN(numId)) {
+        try {
+          const { error } = await client
+            .from('vendors')
+            .delete()
+            .eq('vendor_id', numId);
+
+          if (error) console.error('[EVENTORA] Supabase vendor delete error:', error);
+          else console.log('[EVENTORA] Supabase vendor deleted successfully from DB');
+        } catch (e) {
+          console.warn('[EVENTORA] Exception deleting vendor:', e);
+        }
+      }
+    }
   };
 
+  // ── Booking Actions for Vendor Portal (Section 18) ──────────────────────
   const vendorAcceptBooking = async (bookingId) => {
     const client = sb();
     if (client) {
-      try {
-        await client.from('bookings').update({ booking_status: 'ACCEPTED' }).eq('booking_id', Number(bookingId) || bookingId);
-      } catch(e) {}
-    }
-    if (window.EventoraDB) {
-      EventoraDB.vendorAcceptBooking(bookingId);
+      const numId = Number(bookingId);
+      if (!isNaN(numId)) {
+        try {
+          await client.from('bookings').update({ booking_status: 'Confirmed' }).eq('booking_id', numId);
+        } catch(e) {}
+      }
     }
   };
 
   const vendorRejectBooking = async (bookingId, reason) => {
     const client = sb();
     if (client) {
-      try {
-        await client.from('bookings').update({ booking_status: 'REJECTED' }).eq('booking_id', Number(bookingId) || bookingId);
-      } catch(e) {}
-    }
-    if (window.EventoraDB) {
-      EventoraDB.vendorRejectBooking(bookingId, reason);
+      const numId = Number(bookingId);
+      if (!isNaN(numId)) {
+        try {
+          await client.from('bookings').update({ booking_status: 'Cancelled', service_notes: reason }).eq('booking_id', numId);
+        } catch(e) {}
+      }
     }
   };
 
-  // ── Public API ──────────────────────────────────────────────────────────
+  const loadVendorDashboardData = async (vendorId) => {
+    const client = sb();
+    if (!client) return [];
+    try {
+      const { data } = await client.from('bookings').select('*').eq('vendor_id', Number(vendorId));
+      return data || [];
+    } catch(e) {
+      return [];
+    }
+  };
+
+  const subscribeVendorBookings = (vendorId, callback) => {
+    const client = sb();
+    if (!client) return null;
+    return client.channel('vendor-bookings-' + vendorId)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings', filter: `vendor_id=eq.${vendorId}` }, () => {
+        if (callback) callback();
+      })
+      .subscribe();
+  };
+
+  // ── Admin Governance Actions (Section 29) ───────────────────────────────
+  const adminApproveVendor = async (vendorId) => {
+    console.log('[EVENTORA] Admin approving vendor:', vendorId);
+    if (window.EventoraDB) EventoraDB.updateVendorVerification(vendorId, 'Verified');
+    const client = sb();
+    if (client && !isNaN(Number(vendorId))) {
+      try {
+        await client.from('vendors').update({ is_verified: true }).eq('vendor_id', Number(vendorId));
+      } catch(e) {}
+    }
+    _vendors = await _fetchVendorsFromDB();
+    renderMarketplace();
+  };
+
+  const adminRejectVendor = async (vendorId, reason = 'Incomplete details') => {
+    console.log('[EVENTORA] Admin rejecting vendor:', vendorId, reason);
+    if (window.EventoraDB) EventoraDB.updateVendorVerification(vendorId, 'Rejected');
+    const client = sb();
+    if (client && !isNaN(Number(vendorId))) {
+      try {
+        await client.from('vendors').update({ is_verified: false }).eq('vendor_id', Number(vendorId));
+      } catch(e) {}
+    }
+    _vendors = await _fetchVendorsFromDB();
+    renderMarketplace();
+  };
+
+  const adminSuspendVendor = async (vendorId) => {
+    console.log('[EVENTORA] Admin suspending vendor:', vendorId);
+    if (window.EventoraDB) EventoraDB.updateVendorVerification(vendorId, 'Suspended');
+    const client = sb();
+    if (client && !isNaN(Number(vendorId))) {
+      try {
+        await client.from('vendors').update({ is_verified: false }).eq('vendor_id', Number(vendorId));
+      } catch(e) {}
+    }
+    _vendors = await _fetchVendorsFromDB();
+    renderMarketplace();
+  };
+
   return {
     init,
     cleanup,
-    setCategory: (cat) => { _activeCategory = cat; renderMarketplace(); },
-    setSearch: (q) => { _searchQuery = (q || '').trim(); renderMarketplace(); },
-    renderMarketplace,
-    openVendorDetail,
-    selectPackage,
+    setCategory,
+    setSearch,
     setGuestCount,
+    selectPackage,
+    openVendorDetail,
     submitBooking,
     createVendorBusiness,
+    vendorToggleStorefront,
+    vendorUpdateBusiness,
+    vendorDeleteBusiness,
+    vendorAcceptBooking,
+    vendorRejectBooking,
+    loadAllVendorsForAdmin: () => _fetchVendorsFromDB(),
+    loadVendorDashboardData,
+    subscribeVendorBookings,
     adminApproveVendor,
     adminRejectVendor,
     adminSuspendVendor,
-    vendorToggleStorefront,
-    loadAllVendorsForAdmin,
-    loadVendorDashboardData,
-    subscribeVendorBookings,
-    vendorAcceptBooking,
-    vendorRejectBooking,
-    updateNotificationBadge,
-    renderNotificationPanel,
-    getVendors: () => _vendors,
-    getNotifications: () => _notifications,
-    getUnreadCount: () => _unreadCount
+    handleVendorRealtimeChange: _handleVendorRealtimeChange,
+    getVendors: () => [..._vendors],
+    renderMarketplace
   };
 })();

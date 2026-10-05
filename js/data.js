@@ -588,6 +588,14 @@ window.EventoraDB = (() => {
   };
 
   const registerVendor = (vendorData) => {
+    if (!globalState.vendors) globalState.vendors = [];
+    const cleanName = (vendorData.name || vendorData.business_name || '').toLowerCase().trim();
+    const existing = globalState.vendors.find(v => (v.name || '').toLowerCase().trim() === cleanName);
+    if (existing) {
+      Object.assign(existing, vendorData);
+      _saveGlobal();
+      return existing;
+    }
     const id = 'v-' + uid();
     const newVendor = {
       id,
@@ -600,7 +608,6 @@ window.EventoraDB = (() => {
       packages: [],
       ...vendorData
     };
-    if (!globalState.vendors) globalState.vendors = [];
     globalState.vendors.push(newVendor);
     _saveGlobal();
     logAudit('VENDOR_REGISTER', `New vendor registered: ${newVendor.name}`, { vendorId: id });
