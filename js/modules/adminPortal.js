@@ -5,18 +5,43 @@
  */
 window.AdminPortalModule = (() => {
   let _currentTab = 'overview';
+  let _liveVendors = [];      // loaded fresh from Supabase
+  let _realtimeChannel = null;
 
   const setTab = (tab) => {
     _currentTab = tab;
     renderPortal();
   };
 
-  const renderPortal = (containerId = 'adminPortalContainer') => {
+  // Subscribe admin to real-time vendor submissions
+  const _subscribeAdminRealtime = () => {
+    const client = window.EventoraSupabase?.client;
+    if (!client) return;
+    if (_realtimeChannel) client.removeChannel(_realtimeChannel);
+    _realtimeChannel = client.channel('admin-vendor-updates')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'vendors' }, (payload) => {
+        const v = payload.new;
+        if (window.Toast) Toast.show('info', '🏢 New Vendor Submission', `${v.business_name} (${v.service_category}) is awaiting verification.`);
+        renderPortal();
+      })
+      .subscribe();
+  };
+
+  const renderPortal = async (containerId = 'adminPortalContainer') => {
     const container = document.getElementById(containerId);
     if (!container) return;
 
     const stats = EventoraDB.getPlatformAnalytics();
-    const vendors = EventoraDB.getVendorCatalog();
+
+    // Load live vendors from Supabase if available, else fall back to local
+    if (window.LiveMarketplace && window.EventoraSupabase?.isConnected) {
+      _liveVendors = await LiveMarketplace.loadAllVendorsForAdmin();
+      _subscribeAdminRealtime();
+    } else {
+      _liveVendors = EventoraDB.getVendorCatalog();
+    }
+    const vendors = _liveVendors;
+
     const bookings = EventoraDB.getAllBookings();
     const employees = [
       { id: 'emp-1', name: 'Rahul Verma', role: 'Catering Setup Lead', area: 'Hyderabad Central', status: 'Available' },
@@ -25,6 +50,8 @@ window.AdminPortalModule = (() => {
       { id: 'emp-4', name: 'Ananya Patel', role: 'VIP & Transport Coordinator', area: 'Shamshabad', status: 'Available' }
     ];
     const auditLogs = EventoraDB.getAuditLogs();
+
+    const pendingCount = vendors.filter(v => (v.verification_status || v.verificationStatus) === 'Pending').length;
 
     container.innerHTML = `
       <div class="admin-portal-wrap">
@@ -39,6 +66,7 @@ window.AdminPortalModule = (() => {
                 <div style="display:flex;align-items:center;gap:10px">
                   <h1 style="font-family:var(--font-head);font-size:24px;font-weight:900;color:var(--text-primary);margin:0">Platform Command Center</h1>
                   <span class="badge badge-green">Operations Live</span>
+                  ${pendingCount > 0 ? `<span class="badge badge-amber">${pendingCount} Pending Verification</span>` : ''}
                 </div>
                 <div style="font-size:13px;color:var(--text-muted);margin-top:4px">
                   Central Eventora Ecosystem Dispatch, Governance & Commission Gateway
@@ -271,15 +299,63 @@ window.AdminPortalModule = (() => {
     renderPortal();
   };
 
+  // Live Supabase-backed approve (triggers Realtime → customer marketplace update)
+  const approveVendorLive = async (vendorId) => {
+    try {
+      if (window.LiveMarketplace && window.EventoraSupabase?.isConnected) {
+        await LiveMarketplace.adminApproveVendor(Number(vendorId) || vendorId);
+        Toast.show('success', '✅ Vendor Approved!', 'Business is now live on the marketplace. Customers have been notified.');
+      } else {
+        // Fallback to local
+        EventoraDB.updateVendorVerification(vendorId, 'Verified');
+        Toast.show('success', 'Status Updated', 'Vendor approved (local mode).');
+      }
+      renderPortal();
+    } catch (err) {
+      Toast.show('error', 'Approval Failed', err.message || 'Please try again.');
+    }
+  };
+
+  const rejectVendorLive = async (vendorId) => {
+    Modal.open('Reject Vendor', `
+      <div>
+        <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">Provide a reason (sent to vendor):</p>
+        <select class="input" id="rejectVendorReason">
+          <option>Incomplete business information</option>
+          <option>Invalid documents / license</option>
+          <option>Duplicate business registration</option>
+          <option>Category mismatch</option>
+          <option>Policy violation</option>
+        </select>
+      </div>
+    `, async () => {
+      const reason = document.getElementById('rejectVendorReason')?.value;
+      try {
+        if (window.LiveMarketplace && window.EventoraSupabase?.isConnected) {
+          await LiveMarketplace.adminRejectVendor(Number(vendorId) || vendorId, reason);
+          Toast.show('info', 'Vendor Rejected', 'Vendor has been notified with the rejection reason.');
+        } else {
+          EventoraDB.updateVendorVerification(vendorId, 'Rejected');
+          Toast.show('info', 'Status Updated', 'Vendor rejected (local mode).');
+        }
+        renderPortal();
+      } catch (err) {
+        Toast.show('error', 'Rejection Failed', err.message || 'Please try again.');
+      }
+    }, 'Confirm Rejection');
+  };
+
   const refreshAll = () => {
     renderPortal();
-    Toast.show('info', 'Command Center Refreshed', 'Latest bookings and audit telemetry synchronized.');
+    Toast.show('info', 'Command Center Refreshed', 'Latest data synchronized.');
   };
 
   return {
     setTab,
     renderPortal,
     updateVendorStatus,
+    approveVendorLive,
+    rejectVendorLive,
     refreshAll
   };
 })();

@@ -378,8 +378,16 @@ window.App = (() => {
       guests:     () => GuestsModule.render(evId),
       budget:     () => BudgetModule.render(evId),
       vendors:    () => {
-        if (window.MarketplaceModule) MarketplaceModule.renderMarketplace('tab-vendors');
-        else VendorsModule.render(evId);
+        // Use LiveMarketplace (live Supabase data) if connected, fall back to local
+        if (window.LiveMarketplace) {
+          const el = document.getElementById('tab-vendors');
+          if (el) el.innerHTML = '<div id="marketplaceContainer"></div>';
+          LiveMarketplace.init();
+        } else if (window.MarketplaceModule) {
+          MarketplaceModule.renderMarketplace('tab-vendors');
+        } else {
+          VendorsModule.render(evId);
+        }
       },
       tasks:      () => TasksModule.render(evId),
       venue:      () => VenueModule.render(evId),
@@ -419,6 +427,25 @@ window.App = (() => {
     if (sb) sb.classList.remove('open');
     if (overlay) overlay.style.display = 'none';
   };
+
+  const toggleNotifPanel = () => {
+    const panel = document.getElementById('notifPanel');
+    if (!panel) return;
+    const isOpen = panel.style.display !== 'none';
+    panel.style.display = isOpen ? 'none' : 'block';
+    if (!isOpen && window.LiveMarketplace) {
+      LiveMarketplace.renderNotificationPanel('notifPanelBody');
+    }
+  };
+
+  // Close notif panel when clicking outside
+  document.addEventListener('click', (e) => {
+    const bell = document.getElementById('notifBellBtn');
+    const panel = document.getElementById('notifPanel');
+    if (panel && bell && !bell.contains(e.target) && !panel.contains(e.target)) {
+      panel.style.display = 'none';
+    }
+  });
 
   const scrollTo = (id) => {
     const el = document.getElementById(id);
@@ -507,6 +534,14 @@ window.App = (() => {
     // It handles SIGNED_IN / SIGNED_OUT via onAuthStateChange
     await AuthModule.init();
 
+    // After auth, initialize LiveMarketplace for real-time notifications
+    // (Waits briefly for Supabase connection to stabilise)
+    setTimeout(async () => {
+      if (window.LiveMarketplace && window.EventoraSupabase?.isConnected) {
+        await LiveMarketplace.init();
+      }
+    }, 1500);
+
     // Hide loading splash (AuthModule.init already called goAuth or goDashboard)
     if (loadingEl) loadingEl.classList.remove('active');
 
@@ -516,7 +551,7 @@ window.App = (() => {
   return {
     goHome, goWizard, goDashboard, goAuth, requireAuth, afterAuth,
     goVendor, goEmployee, goAdmin, switchRole, renderRoleBars, showView,
-    switchTab, toggleSidebar, closeSidebar,
+    switchTab, toggleSidebar, closeSidebar, toggleNotifPanel,
     scrollTo, openEventSwitcher, setActiveEvent, refreshSidebarEvent,
     refreshSidebar: refreshSidebarEvent,
   };

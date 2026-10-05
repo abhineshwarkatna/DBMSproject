@@ -4,8 +4,11 @@
  * package & service management, revenue & commission ledger, and customer reviews.
  */
 window.VendorPortalModule = (() => {
-  let _activeVendorId = 'v-royal-feast'; // Default active vendor for partner portal
+  let _activeVendorId = 'v-royal-feast';
   let _currentTab = 'bookings';
+  let _liveBookings = null;      // null = not yet loaded from Supabase
+  let _supabaseVendorId = null;  // numeric vendor_id from Supabase vendors table
+  let _realtimeChannel = null;
 
   const setVendor = (vendorId) => {
     _activeVendorId = vendorId;
@@ -17,11 +20,36 @@ window.VendorPortalModule = (() => {
     renderPortal();
   };
 
+  // Look up this vendor's numeric Supabase vendor_id by matching user email/id
+  const _resolveSupabaseVendorId = async () => {
+    const client = window.EventoraSupabase?.client;
+    const user = window.AuthModule?.getUser();
+    if (!client || !user) return null;
+    const { data } = await client
+      .from('vendors')
+      .select('vendor_id')
+      .eq('user_id', user.id)
+      .maybeSingle();
+    return data?.vendor_id || null;
+  };
+
+  // Subscribe to real-time booking updates for this vendor
+  const _subscribeBookings = (vendorId) => {
+    if (!window.LiveMarketplace) return;
+    if (_realtimeChannel) {
+      const client = window.EventoraSupabase?.client;
+      if (client) client.removeChannel(_realtimeChannel);
+    }
+    _realtimeChannel = LiveMarketplace.subscribeVendorBookings(vendorId, () => {
+      if (window.Toast) Toast.show('info', '🛎️ Booking Update', 'A booking was updated. Refreshing...');
+      renderPortal();
+    });
+  };
+
   const resolveActiveVendor = () => {
     const user = window.AuthModule ? AuthModule.getUser() : null;
     const userEmail = (user?.email || '').toLowerCase();
     const catalog = EventoraDB.getVendorCatalog();
-
     if (user?.user_metadata?.vendorId) {
       const v = EventoraDB.getVendorById(user.user_metadata.vendorId);
       if (v) return v;
@@ -33,18 +61,43 @@ window.VendorPortalModule = (() => {
     return EventoraDB.getVendorById(_activeVendorId) || catalog[0];
   };
 
-  const renderPortal = (containerId = 'vendorPortalContainer') => {
+  const renderPortal = async (containerId = 'vendorPortalContainer') => {
     const container = document.getElementById(containerId);
     if (!container) return;
 
     const vendor = resolveActiveVendor();
-    const allBookings = EventoraDB.getBookingsForVendor(vendor.id);
-    const pendingBookings = allBookings.filter(b => b.status === EventoraDB.BOOKING_STATUS.REQUESTED || b.status === EventoraDB.BOOKING_STATUS.PENDING_VENDOR);
-    const activeBookings = allBookings.filter(b => b.status === EventoraDB.BOOKING_STATUS.ACCEPTED || b.status === EventoraDB.BOOKING_STATUS.CONFIRMED || b.status === EventoraDB.BOOKING_STATUS.IN_PROGRESS);
-    const completedBookings = allBookings.filter(b => b.status === EventoraDB.BOOKING_STATUS.COMPLETED);
 
-    const grossRevenue = completedBookings.reduce((sum, b) => sum + (Number(b.total) || 0), 0) +
-                         activeBookings.reduce((sum, b) => sum + (Number(b.total) || 0), 0);
+    // ── Load live bookings from Supabase ──────────────────────────────────
+    let allBookings, pendingBookings, activeBookings, completedBookings;
+    if (window.LiveMarketplace && window.EventoraSupabase?.isConnected) {
+      // Resolve Supabase vendor_id once
+      if (!_supabaseVendorId) {
+        _supabaseVendorId = await _resolveSupabaseVendorId();
+      }
+      if (_supabaseVendorId) {
+        const raw = await LiveMarketplace.loadVendorDashboardData(_supabaseVendorId) || [];
+        _liveBookings = raw;
+        _subscribeBookings(_supabaseVendorId);
+        allBookings = raw;
+        pendingBookings = raw.filter(b => b.booking_status === 'REQUESTED' || b.booking_status === 'PENDING_VENDOR');
+        activeBookings  = raw.filter(b => ['ACCEPTED','CONFIRMED','IN_PROGRESS'].includes(b.booking_status));
+        completedBookings = raw.filter(b => b.booking_status === 'COMPLETED');
+      } else {
+        // Vendor has no Supabase record yet — show create business prompt
+        _renderCreateBusinessPrompt(container, vendor);
+        return;
+      }
+    } else {
+      // Fallback: local EventoraDB
+      allBookings = EventoraDB.getBookingsForVendor(vendor.id);
+      pendingBookings   = allBookings.filter(b => b.status === EventoraDB.BOOKING_STATUS.REQUESTED || b.status === EventoraDB.BOOKING_STATUS.PENDING_VENDOR);
+      activeBookings    = allBookings.filter(b => [EventoraDB.BOOKING_STATUS.ACCEPTED, EventoraDB.BOOKING_STATUS.CONFIRMED, EventoraDB.BOOKING_STATUS.IN_PROGRESS].includes(b.status));
+      completedBookings = allBookings.filter(b => b.status === EventoraDB.BOOKING_STATUS.COMPLETED);
+    }
+    // ─────────────────────────────────────────────────────────────────────
+
+    const grossRevenue = completedBookings.reduce((s,b) => s + (Number(b.total_amount || b.total) || 0), 0)
+                       + activeBookings.reduce((s,b) => s + (Number(b.total_amount || b.total) || 0), 0);
     const platformCommission = Math.round(grossRevenue * 0.10);
     const netPayout = grossRevenue - platformCommission;
 
@@ -368,40 +421,143 @@ window.VendorPortalModule = (() => {
     return '';
   };
 
-  const acceptBooking = (bookingId) => {
-    const updated = EventoraDB.vendorAcceptBooking(bookingId);
-    if (updated) {
-      Toast.show('success', 'Booking Accepted! 🎉', `Field Staff Lead assigned. Operations dispatch notified.`);
-      renderPortal();
-      // Also update customer view if open
-      if (window.App && typeof App.refreshSidebarEvent === 'function') {
-        App.refreshSidebarEvent();
+  // ── Create Business Prompt ─────────────────────────────────────────────
+  const _renderCreateBusinessPrompt = (container, vendor) => {
+    container.innerHTML = `
+      <div class="vendor-portal-wrap">
+        <div class="card" style="max-width:560px;margin:60px auto;padding:40px;text-align:center;border:1.5px solid var(--border)">
+          <div style="font-size:48px;margin-bottom:16px">🏢</div>
+          <h2 style="font-family:var(--font-head);font-size:24px;font-weight:900;margin:0 0 8px">Set Up Your Business</h2>
+          <p style="font-size:14px;color:var(--text-muted);margin-bottom:28px">
+            You haven't registered a business on Eventora yet. Create your business profile to start receiving bookings.
+          </p>
+          <button class="btn btn-primary btn-lg" onclick="VendorPortalModule.showCreateBusinessModal()">
+            + Create My Business
+          </button>
+        </div>
+      </div>
+    `;
+  };
+
+  const showCreateBusinessModal = () => {
+    const categories = ['Catering','Photography','Decor','Entertainment','Venues','Transport','Security','Other'];
+    Modal.open('Create Your Business', `
+      <div style="display:grid;gap:16px">
+        <div class="form-group">
+          <label class="form-label">Business Name *</label>
+          <input class="input" id="bizName" placeholder="e.g. SS Business" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Category *</label>
+          <select class="input" id="bizCategory">
+            ${categories.map(c => `<option>${c}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Description</label>
+          <textarea class="input" id="bizDesc" rows="3" placeholder="Tell customers about your services..."></textarea>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="form-group">
+            <label class="form-label">City / Location *</label>
+            <input class="input" id="bizCity" placeholder="Hyderabad" value="Hyderabad">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Service Area</label>
+            <input class="input" id="bizArea" placeholder="Telangana & AP">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="form-group">
+            <label class="form-label">Phone *</label>
+            <input class="input" id="bizPhone" placeholder="+91 XXXXX XXXXX">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Starting Price (₹)</label>
+            <input class="input" type="number" id="bizPrice" placeholder="499" min="0">
+          </div>
+        </div>
+        <div style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:var(--r-md);padding:12px;font-size:13px;color:#92400e">
+          ⚠️ Your business will be reviewed by admin before going live on the marketplace.
+        </div>
+      </div>
+    `, async () => {
+      const name = document.getElementById('bizName')?.value?.trim();
+      const category = document.getElementById('bizCategory')?.value;
+      if (!name) { Toast.show('warning','Required','Please enter a business name.'); return; }
+
+      const btn = document.getElementById('modalConfirmBtn');
+      if (btn) { btn.disabled = true; btn.textContent = 'Creating...'; }
+
+      try {
+        await LiveMarketplace.createVendorBusiness({
+          business_name: name,
+          service_category: category,
+          description: document.getElementById('bizDesc')?.value?.trim() || '',
+          location: document.getElementById('bizCity')?.value?.trim() || 'Hyderabad',
+          service_area: document.getElementById('bizArea')?.value?.trim() || 'Telangana & AP',
+          phone: document.getElementById('bizPhone')?.value?.trim() || '',
+          starting_price: document.getElementById('bizPrice')?.value || 0,
+        });
+        Modal.close();
+        Toast.show('success', '🎉 Business Created!', 'Your business is pending admin verification. You\'ll be notified once approved.');
+        _supabaseVendorId = null; // reset so it re-fetches
+        renderPortal();
+      } catch (err) {
+        Toast.show('error', 'Creation Failed', err.message || 'Please try again.');
+        if (btn) { btn.disabled = false; btn.textContent = 'Create Business'; }
+      }
+    }, 'Create Business');
+  };
+
+  const acceptBooking = async (bookingId) => {
+    // Try live Supabase first
+    if (window.LiveMarketplace && window.EventoraSupabase?.isConnected) {
+      try {
+        await LiveMarketplace.vendorAcceptBooking(Number(bookingId) || bookingId);
+        Toast.show('success', '✅ Booking Accepted!', 'Customer has been notified. Eventora operations will coordinate.');
+        renderPortal();
+      } catch (err) {
+        Toast.show('error', 'Accept Failed', err.message || 'Please try again.');
+      }
+    } else {
+      // Local fallback
+      const updated = EventoraDB.vendorAcceptBooking(bookingId);
+      if (updated) {
+        Toast.show('success', 'Booking Accepted! 🎉', 'Field Staff Lead assigned. Operations dispatch notified.');
+        renderPortal();
+        if (window.App && typeof App.refreshSidebarEvent === 'function') App.refreshSidebarEvent();
       }
     }
   };
 
   const rejectBooking = (bookingId) => {
-    Modal.open(
-      'Decline Booking Request',
-      `
-        <div>
-          <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">Please specify a reason for the customer:</p>
-          <select class="input" id="rejectReasonSelect">
-            <option>Fully booked on selected event date</option>
-            <option>Guest capacity exceeds current kitchen limits</option>
-            <option>Venue outside standard travel perimeter</option>
-            <option>Custom requirement cannot be fulfilled</option>
-          </select>
-        </div>
-      `,
-      () => {
-        const reason = document.getElementById('rejectReasonSelect')?.value || 'Unavailable';
+    Modal.open('Decline Booking Request', `
+      <div>
+        <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">Please specify a reason for the customer:</p>
+        <select class="input" id="rejectReasonSelect">
+          <option>Fully booked on selected event date</option>
+          <option>Guest capacity exceeds current limits</option>
+          <option>Venue outside service perimeter</option>
+          <option>Custom requirement cannot be fulfilled</option>
+        </select>
+      </div>
+    `, async () => {
+      const reason = document.getElementById('rejectReasonSelect')?.value || 'Unavailable';
+      if (window.LiveMarketplace && window.EventoraSupabase?.isConnected) {
+        try {
+          await LiveMarketplace.vendorRejectBooking(Number(bookingId) || bookingId, reason);
+          Toast.show('info', 'Booking Declined', 'The customer has been notified.');
+          renderPortal();
+        } catch (err) {
+          Toast.show('error', 'Reject Failed', err.message || 'Please try again.');
+        }
+      } else {
         EventoraDB.vendorRejectBooking(bookingId, reason);
         Toast.show('info', 'Booking Declined', 'The customer has been notified.');
         renderPortal();
-      },
-      'Confirm Decline'
-    );
+      }
+    }, 'Confirm Decline');
   };
 
   return {
@@ -409,6 +565,7 @@ window.VendorPortalModule = (() => {
     setTab,
     renderPortal,
     acceptBooking,
-    rejectBooking
+    rejectBooking,
+    showCreateBusinessModal,
   };
 })();

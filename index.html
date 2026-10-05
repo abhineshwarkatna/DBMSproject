@@ -837,6 +837,24 @@
         </div>
         <div class="dash-topbar-right">
           <span id="dashEventStatus" class="badge badge-amber">⏳ Planning</span>
+          <!-- Notification Bell -->
+          <div style="position:relative;display:inline-flex">
+            <button class="btn btn-secondary btn-sm" id="notifBellBtn"
+                    onclick="App.toggleNotifPanel()"
+                    style="padding:6px 10px;font-size:16px;position:relative">
+              🔔
+              <span id="notifBadgeCount"
+                    style="display:none;position:absolute;top:-4px;right:-4px;background:var(--danger,#ef4444);color:#fff;border-radius:50%;width:18px;height:18px;font-size:10px;font-weight:800;align-items:center;justify-content:center"></span>
+            </button>
+            <!-- Notification Dropdown Panel -->
+            <div id="notifPanel" style="display:none;position:absolute;top:calc(100% + 8px);right:0;width:360px;max-height:480px;overflow-y:auto;background:var(--bg-white);border:1.5px solid var(--border);border-radius:var(--r-lg);box-shadow:0 12px 40px rgba(0,0,0,0.15);z-index:9999">
+              <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+                <div style="font-weight:800;font-size:15px">🔔 Notifications</div>
+                <button class="btn btn-ghost btn-xs" onclick="LiveMarketplace.markAllRead();LiveMarketplace.renderNotificationPanel()">Mark all read</button>
+              </div>
+              <div id="notifPanelBody"></div>
+            </div>
+          </div>
           <button class="btn btn-secondary btn-sm" onclick="App.requireAuth('wizard')">+ New Event</button>
           <button class="btn btn-primary btn-sm" onclick="App.switchTab('live')">🔴 Go Live</button>
         </div>
@@ -1001,6 +1019,7 @@
 <script src="js/modules/guests.js"></script>
 <script src="js/modules/budget.js"></script>
 <script src="js/modules/marketplace.js"></script>
+<script src="js/modules/marketplace_live.js"></script>
 <script src="js/modules/vendorPortal.js"></script>
 <script src="js/modules/employeePortal.js"></script>
 <script src="js/modules/adminPortal.js"></script>
