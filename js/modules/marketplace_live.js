@@ -28,6 +28,7 @@ window.LiveMarketplace = (() => {
   let _unreadCount = 0;
   let _isLoading = false;
   let _loadError = null;
+  let _pollInterval = null;
 
   const CATEGORIES = [
     { id: 'All',           label: 'All Services',     icon: '✨' },
@@ -204,6 +205,38 @@ window.LiveMarketplace = (() => {
 
     // Merge with local fallback catalog if present
     const localCatalog = (window.EventoraDB ? EventoraDB.getVendorCatalog() : []).map(_normalizeVendor);
+
+    // Auto-sync any user-registered local vendor (like Max Catering / SS Business) to Supabase
+    if (client && supabaseVendors.length > 0) {
+      const defaultSeeds = ['royal feast catering', 'lumina cinematic studios', 'grand crystal ballroom', 'bassline beats', 'royal fleet & coaches', 'shieldguard security'];
+      for (const locV of localCatalog) {
+        const locName = (locV.name || '').toLowerCase().trim();
+        const existsInSupabase = supabaseVendors.some(sv => (sv.name || '').toLowerCase().trim() === locName);
+        if (!existsInSupabase && locV.name && !defaultSeeds.includes(locName)) {
+          console.log('[EVENTORA] Auto-syncing un-synced local vendor to cloud Supabase:', locV.name);
+          try {
+            const { data: insertedV } = await client.from('vendors').insert([{
+              business_name: locV.name,
+              service_category: _toDBServiceCategory(locV.category),
+              contact_name: locV.contactName || locV.name,
+              email: locV.email || `partner-${Date.now()}@eventora.io`,
+              phone: locV.phone || '+91 98765 00000',
+              base_price: Number(locV.price) || 499,
+              rating: Number(locV.rating) || 5.0,
+              is_verified: true
+            }]).select().single();
+            if (insertedV) {
+              const norm = _normalizeVendor(insertedV);
+              supabaseVendors.push(norm);
+              console.log('[EVENTORA] Auto-synced vendor successfully:', norm.name, norm.vendor_id);
+            }
+          } catch(syncErr) {
+            console.warn('[EVENTORA] Auto-sync notice for vendor:', locV.name, syncErr);
+          }
+        }
+      }
+    }
+
     const mergedMap = new Map();
 
     // 1. Add local seed vendors first
@@ -234,6 +267,77 @@ window.LiveMarketplace = (() => {
     return finalVendors;
   };
 
+  // ── Broadcast Cross-Session Helper ──────────────────────────────────────
+  const _broadcastVendorChange = (changePayload) => {
+    try {
+      const ch = _realtimeChannels['broadcast'];
+      if (ch) {
+        ch.send({
+          type: 'broadcast',
+          event: 'vendor_sync',
+          payload: changePayload
+        });
+        console.log('[EVENTORA] Broadcasted vendor change event:', changePayload.eventType);
+      }
+    } catch(e) {
+      console.warn('[EVENTORA] Broadcast exception:', e);
+    }
+  };
+
+  // ── Periodic Background Sync (Guarantees multi-device updates even if websockets lag) ──
+  const _fetchAndMergeVendors = async () => {
+    const client = sb();
+    if (!client) return;
+    try {
+      const { data, error } = await client
+        .from('vendors')
+        .select('*')
+        .order('vendor_id', { ascending: false });
+      if (error || !data) return;
+
+      let changed = false;
+      const normalizedList = data.map(_normalizeVendor);
+
+      normalizedList.forEach(nv => {
+        const key = (nv.business_name || nv.name || '').toLowerCase().trim();
+        const existingIdx = _vendors.findIndex(v =>
+          (v.vendor_id && nv.vendor_id && Number(v.vendor_id) === Number(nv.vendor_id)) ||
+          (v.name && v.name.toLowerCase().trim() === key)
+        );
+
+        if (_isVendorPublic(nv)) {
+          if (existingIdx === -1) {
+            _vendors.unshift(nv);
+            changed = true;
+            console.log('[EVENTORA] Live sync: Discovered new vendor in DB:', nv.name);
+            if (window.Toast && _initialized) {
+              window.Toast.show(
+                'success',
+                '✨ New Partner Live on Eventora!',
+                `${nv.name} (${nv.category}) is now active!`
+              );
+            }
+          } else {
+            const existing = _vendors[existingIdx];
+            if (existing.is_verified !== nv.is_verified || existing.price !== nv.price || existing.name !== nv.name) {
+              _vendors[existingIdx] = { ...existing, ...nv };
+              changed = true;
+            }
+          }
+        } else if (existingIdx !== -1) {
+          _vendors.splice(existingIdx, 1);
+          changed = true;
+        }
+      });
+
+      if (changed) {
+        renderMarketplace();
+      }
+    } catch (e) {
+      console.warn('[EVENTORA] Background vendor sync notice:', e);
+    }
+  };
+
   // ── Realtime Channel Setup (Section 6, 7 & 24) ──────────────────────────
   const _subscribeRealtime = () => {
     const client = sb();
@@ -247,9 +351,27 @@ window.LiveMarketplace = (() => {
 
     try {
       _updateConnectionIndicator('connecting');
-      console.log('[EVENTORA] Realtime connecting to table: vendors...');
+      console.log('[EVENTORA] Realtime connecting: Broadcast + PostgreSQL changes...');
 
-      // Persistent Realtime channel on public.vendors
+      // 1. Supabase Realtime Broadcast Channel (Instant client-to-client WebSocket sync)
+      const broadcastChannel = client.channel('eventora-marketplace-broadcast', {
+        config: { broadcast: { ack: true } }
+      });
+      broadcastChannel.on('broadcast', { event: 'vendor_sync' }, (payload) => {
+        console.log('[EVENTORA] Live broadcast vendor sync received:', payload);
+        if (payload && payload.payload) {
+          _handleVendorRealtimeChange(payload.payload);
+        }
+      });
+      broadcastChannel.subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('[EVENTORA] Realtime broadcast channel subscribed!');
+          _updateConnectionIndicator('connected');
+        }
+      });
+      _realtimeChannels['broadcast'] = broadcastChannel;
+
+      // 2. Persistent Realtime channel on public.vendors (PostgreSQL replication)
       const vendorChannel = client.channel('eventora-public-vendors-live')
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'vendors' }, (payload) => {
           console.log('[EVENTORA] Vendor INSERT event received:', payload.new);
@@ -264,17 +386,14 @@ window.LiveMarketplace = (() => {
           _handleVendorRealtimeChange(payload);
         })
         .subscribe((status) => {
-          console.log('[EVENTORA] Realtime status:', status);
+          console.log('[EVENTORA] Postgres changes status:', status);
           if (status === 'SUBSCRIBED') {
             _updateConnectionIndicator('connected');
-          } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-            _updateConnectionIndicator('disconnected');
           }
         });
-
       _realtimeChannels['vendors'] = vendorChannel;
 
-      // Realtime channel for bookings
+      // 3. Realtime channel for bookings
       const bookingChannel = client.channel('eventora-public-bookings-live')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, (payload) => {
           console.log('[EVENTORA] Booking change event received:', payload.eventType, payload.new || payload.old);
@@ -282,6 +401,23 @@ window.LiveMarketplace = (() => {
         })
         .subscribe();
       _realtimeChannels['bookings'] = bookingChannel;
+
+      // 4. Background Polling Fallback (runs every 4 seconds to guarantee updates across devices)
+      if (_pollInterval) clearInterval(_pollInterval);
+      _pollInterval = setInterval(_fetchAndMergeVendors, 4000);
+
+      // 5. Window Focus & Visibility Listeners
+      if (typeof window !== 'undefined' && !window._mktListenersAttached) {
+        window._mktListenersAttached = true;
+        if (window.addEventListener) {
+          window.addEventListener('focus', () => _fetchAndMergeVendors());
+        }
+        if (typeof document !== 'undefined' && document.addEventListener) {
+          document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) _fetchAndMergeVendors();
+          });
+        }
+      }
 
     } catch (e) {
       console.warn('[EVENTORA] Realtime subscription exception:', e);
@@ -380,6 +516,10 @@ window.LiveMarketplace = (() => {
   };
 
   const cleanup = () => {
+    if (_pollInterval) {
+      clearInterval(_pollInterval);
+      _pollInterval = null;
+    }
     const client = sb();
     if (client) {
       Object.values(_realtimeChannels).forEach(ch => {
@@ -808,6 +948,7 @@ window.LiveMarketplace = (() => {
           } else {
             _vendors[existingIdx] = { ..._vendors[existingIdx], ...norm };
           }
+          _broadcastVendorChange({ eventType: 'INSERT', new: data });
           renderMarketplace();
           return data;
         }
@@ -825,6 +966,7 @@ window.LiveMarketplace = (() => {
       } else {
         _vendors[existingIdx] = { ..._vendors[existingIdx], ...norm };
       }
+      _broadcastVendorChange({ eventType: 'INSERT', new: localVendor });
       renderMarketplace();
     }
 
@@ -840,24 +982,23 @@ window.LiveMarketplace = (() => {
       EventoraDB.updateVendorStorefront(vendorId, isOnline);
     }
 
-    if (client) {
-      const numId = Number(vendorId);
-      if (!isNaN(numId)) {
-        try {
-          const { data, error } = await client
-            .from('vendors')
-            .update({ is_verified: isOnline })
-            .eq('vendor_id', numId)
-            .select();
+    const numId = Number(vendorId);
+    if (client && !isNaN(numId)) {
+      try {
+        const { data, error } = await client
+          .from('vendors')
+          .update({ is_verified: isOnline })
+          .eq('vendor_id', numId)
+          .select();
 
-          if (error) console.error('[EVENTORA] Storefront update error:', error);
-          else console.log('[EVENTORA] Storefront status updated in Supabase:', data);
-        } catch (e) {
-          console.warn('[EVENTORA] Exception updating storefront:', e);
-        }
+        if (error) console.error('[EVENTORA] Storefront update error:', error);
+        else console.log('[EVENTORA] Storefront status updated in Supabase:', data);
+      } catch (e) {
+        console.warn('[EVENTORA] Exception updating storefront:', e);
       }
     }
 
+    _broadcastVendorChange({ eventType: 'UPDATE', new: { vendor_id: numId, is_verified: isOnline } });
     _vendors = await _fetchVendorsFromDB();
     renderMarketplace();
   };
@@ -885,7 +1026,10 @@ window.LiveMarketplace = (() => {
             .select();
 
           if (error) console.error('[EVENTORA] Supabase vendor update error:', error);
-          else console.log('[EVENTORA] Supabase vendor updated successfully:', data);
+          else {
+            console.log('[EVENTORA] Supabase vendor updated successfully:', data);
+            if (data && data[0]) _broadcastVendorChange({ eventType: 'UPDATE', new: data[0] });
+          }
         } catch (e) {
           console.warn('[EVENTORA] Exception updating vendor:', e);
         }
@@ -908,7 +1052,10 @@ window.LiveMarketplace = (() => {
             .eq('vendor_id', numId);
 
           if (error) console.error('[EVENTORA] Supabase vendor delete error:', error);
-          else console.log('[EVENTORA] Supabase vendor deleted successfully from DB');
+          else {
+            console.log('[EVENTORA] Supabase vendor deleted successfully from DB');
+            _broadcastVendorChange({ eventType: 'DELETE', old: { vendor_id: numId } });
+          }
         } catch (e) {
           console.warn('[EVENTORA] Exception deleting vendor:', e);
         }
@@ -1024,6 +1171,8 @@ window.LiveMarketplace = (() => {
     adminRejectVendor,
     adminSuspendVendor,
     handleVendorRealtimeChange: _handleVendorRealtimeChange,
+    broadcastVendorChange: _broadcastVendorChange,
+    fetchAndMergeVendors: _fetchAndMergeVendors,
     getVendors: () => [..._vendors],
     renderMarketplace
   };

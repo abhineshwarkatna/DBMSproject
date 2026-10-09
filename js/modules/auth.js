@@ -638,15 +638,22 @@ window.AuthModule = (() => {
 
       // Also register to real Supabase database so all customers see this vendor immediately
       if (window.LiveMarketplace && typeof LiveMarketplace.createVendorBusiness === 'function') {
-        LiveMarketplace.createVendorBusiness({
-          business_name: bizName,
-          service_category: bizCategory,
-          location: bizCity,
-          email: email,
-          contact_name: name,
-          phone: '+91 98765 00000',
-          starting_price: bizCategory === 'Catering' ? 599 : (bizCategory === 'Venues' ? 85000 : 25000)
-        }).catch(err => console.warn('[Auth] Live business registration notice:', err));
+        try {
+          const dbCreated = await LiveMarketplace.createVendorBusiness({
+            business_name: bizName,
+            service_category: bizCategory,
+            location: bizCity,
+            email: email,
+            contact_name: name,
+            phone: '+91 98765 00000',
+            starting_price: bizCategory === 'Catering' ? 499 : (bizCategory === 'Venues' ? 85000 : 25000)
+          });
+          if (dbCreated && (dbCreated.vendor_id || dbCreated.id)) {
+            userMetadata.vendor_id = dbCreated.vendor_id || dbCreated.id;
+          }
+        } catch(err) {
+          console.warn('[Auth] Live business registration notice:', err);
+        }
       }
 
     } else if (role === 'employee') {

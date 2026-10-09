@@ -71,6 +71,25 @@ window.VendorPortalModule = (() => {
 
     const vendor = resolveActiveVendor();
 
+    // Auto-ensure active vendor is synced to cloud database so customers see it immediately
+    if (vendor && window.LiveMarketplace && window.EventoraSupabase?.isConnected) {
+      const client = window.EventoraSupabase.client;
+      if (client && vendor.name) {
+        client.from('vendors').select('vendor_id').ilike('business_name', vendor.name.trim()).maybeSingle().then(res => {
+          if (!res.data && !res.error) {
+            console.log('[VendorPortal] Syncing active vendor to Supabase:', vendor.name);
+            LiveMarketplace.createVendorBusiness({
+              business_name: vendor.name,
+              service_category: vendor.category || 'Catering',
+              location: vendor.city || 'Hyderabad',
+              phone: vendor.phone || '+91 98765 00000',
+              starting_price: vendor.price || 499
+            });
+          }
+        }).catch(() => {});
+      }
+    }
+
     // ── Load live bookings from Supabase / EventoraDB ──────────────────────
     let allBookings = [], pendingBookings = [], activeBookings = [], completedBookings = [];
     if (window.LiveMarketplace && window.EventoraSupabase?.isConnected) {
